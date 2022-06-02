@@ -1,132 +1,82 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::types::{type_var, Type};
-use anyhow::{anyhow, Result};
+use crate::types::{new_function, new_operator, new_variable, Id, Type};
+use anyhow::Result;
 use symbolic_expressions::Sexp;
 
-pub fn default_env() -> HashMap<String, Type> {
-    let a = Box::new(type_var().1);
-
-    HashMap::from([
-        ("true".to_string(), Type::bool()),
-        ("false".to_string(), Type::bool()),
-        ("not".to_string(), Type::bool().to(Type::bool())),
-        ("id".to_string(), a.clone().to(*a)),
-        ("zero?".to_string(), Type::int().to(Type::bool())),
-    ])
+pub fn default_env() -> (Vec<Type>, Env) {
+    let mut alloc = vec![Type::op(0, "int", &[]), Type::op(1, "bool", &[])];
+    let a = new_variable(&mut alloc);
+    let env = Env(HashMap::from([
+        ("true".to_string(), 1),
+        ("false".to_string(), 1),
+        ("not".to_string(), new_function(&mut alloc, 1, 1)),
+        ("id".to_string(), new_function(&mut alloc, a, a)),
+        ("zero?".to_string(), new_function(&mut alloc, 0, 1)),
+        ("succ".to_string(), new_function(&mut alloc, 0, 0)),
+    ]));
+    (alloc, env)
 }
 
-#[derive(Debug)]
-pub struct InferCtx {
-    pub env: HashMap<String, Type>,
-    pub references: HashMap<String, Type>,
-}
-
-fn is_number(lit: &String) -> bool {
+fn is_number(lit: &str) -> bool {
     lit.chars().all(|c| c.is_numeric())
 }
 
-impl InferCtx {
-    pub fn new() -> Self {
-        Self {
-            env: default_env(),
-            references: HashMap::new(),
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct Env(HashMap<String, Id>);
 
-    pub fn copy(&self) -> Self {
-        Self {
-            env: self.env.clone(),
-            references: self.references.clone(),
-        }
-    }
-
-    pub fn update(&mut self, name: &String) -> Option<Type> {
-        if let Some(typ) = self.references.get(name) {
-            let typ = self.fresh(typ);
-            self.env.insert(name.clone(), typ.clone());
-            return Some(typ.clone());
-        }
-        None
-    }
-
-    fn fresh_rec(&self, mapping: &mut HashMap<Type, Type>, t: &Type) -> Type {
-        let u = prune(t);
-        match &u {
-            Type::TypeVar(_, Some(name)) => {
-                if is_generic(self, &u) {
-                    if !mapping.contains_key(&u) {
-                        let (_, t) = type_var();
-                        mapping.insert(u.clone(), t);
-                    }
-                    return mapping.get(&u).unwrap().clone();
-                } else {
-                    return u;
-                }
-            }
-            Type::Lambda(arg_typ, ret_type) => {
-                let arg_typ = self.fresh_rec(mapping, arg_typ);
-                let ret = self.fresh_rec(mapping, ret_type);
-                return Type::Lambda(Box::new(arg_typ), Box::new(ret));
-            }
-            _ => u,
-        }
-    }
-
-    fn fresh(&self, typ: &Type) -> Type {
-        let mut mapping: HashMap<Type, Type> = HashMap::new();
-        return self.fresh_rec(&mut mapping, typ);
+fn get_type(a: &mut Vec<Type>, name: &str, env: &Env, non_generic: &HashSet<Id>) -> Id {
+    if let Some(value) = env.0.get(name) {
+        let ng = non_generic.iter().cloned().collect::<Vec<_>>();
+        fresh(a, *value, &ng)
+    } else if is_number(name) {
+        // int
+        0
+    } else {
+        panic!("unknown symbol: {}", name)
     }
 }
 
-pub fn infer(ctx: &mut InferCtx, expr: Sexp) -> Result<Type> {
+pub fn analyse(
+    alloc: &mut Vec<Type>,
+    expr: &Sexp,
+    env: &Env,
+    non_generic: &HashSet<Id>,
+) -> Result<Id> {
+    println!("analyse: {}", expr);
     let ret = match &expr {
-        Sexp::String(var) => {
-            if let Some(typ) = ctx.env.get(var) {
-                return Ok(typ.clone());
-            }
-            if let Some(typ) = ctx.update(var) {
-                Ok(typ)
-            } else if is_number(&var) {
-                Ok(Type::int())
-            } else {
-                Err(anyhow!("unknown variable: {}", var))
-            }
-        }
+        Sexp::String(ref name) => Ok(get_type(alloc, name, env, non_generic)),
         Sexp::List(opes) => {
             let op = opes[0].string()?;
             match op.as_str() {
                 "app" => {
-                    let (f, arg) = (opes[1].clone(), opes[2].clone());
-                    let mut fn_type = infer(ctx, f)?;
-                    let arg_type = infer(ctx, arg)?;
-                    let (_, ret_type) = type_var();
-                    let new_fn_type = Type::Lambda(Box::new(arg_type), Box::new(ret_type.clone()));
-
-                    println!("app: {} vs {}", fn_type, new_fn_type);
-                    fn_type = unify(ctx, &fn_type, &new_fn_type)?;
-                    println!("-> {}", fn_type);
-                    Ok(prune(&fn_type.ret_type().unwrap()))
+                    let (func, arg) = (&opes[1], &opes[2]);
+                    let fn_type = analyse(alloc, func, env, non_generic)?;
+                    let arg_type = analyse(alloc, arg, env, non_generic)?;
+                    let ret = new_variable(alloc);
+                    let new_fn_type = new_function(alloc, arg_type, ret.clone());
+                    unify(alloc, new_fn_type, fn_type)?;
+                    Ok(ret)
                 }
                 "lam" => {
-                    let (arg, body) = (opes[1].string()?, opes[2].clone());
-                    let (name, param_type) = type_var();
-                    let mut ctx = ctx.copy();
-                    ctx.env.insert(arg.clone(), param_type.clone());
-                    ctx.references.insert(name, param_type.clone());
-                    let body_ret = infer(&mut ctx, body)?;
-                    ctx.env.insert(arg.clone(), param_type.clone());
-                    let param = infer(&mut ctx, opes[1].clone())?;
-                    ctx.env.insert(arg.clone(), param.clone());
-                    Ok(Type::Lambda(Box::new(param), Box::new(body_ret)))
+                    let (arg, body) = (opes[1].string()?, &opes[2]);
+                    let arg_type_id = new_variable(alloc);
+                    let mut new_env = env.clone();
+                    new_env.0.insert(arg.clone(), arg_type_id);
+
+                    let mut new_non_generic = non_generic.clone();
+                    new_non_generic.insert(arg_type_id);
+                    let ret = analyse(alloc, body, &new_env, &new_non_generic)?;
+                    Ok(new_function(alloc, arg_type_id, ret))
                 }
                 "let" => {
-                    let (name, value, body) = (opes[1].string()?, opes[2].clone(), opes[3].clone());
-                    let mut ctx = ctx.copy();
-                    let value_type = infer(&mut ctx, value)?;
-                    ctx.env.insert(name.to_string(), value_type.clone());
-                    let res = infer(&mut ctx, body)?;
-                    Ok(prune(&res))
+                    let (v, defn, body) = (&opes[1], &opes[2], &opes[3]);
+                    let defn_type_id = analyse(alloc, defn, env, non_generic)?;
+                    let mut new_env = env.clone();
+                    new_env
+                        .0
+                        .insert(v.string().unwrap().to_string(), defn_type_id);
+                    analyse(alloc, body, &new_env, non_generic)
                 }
                 _ => Err(anyhow::anyhow!("unknown operator: {}", op)),
             }
@@ -134,65 +84,115 @@ pub fn infer(ctx: &mut InferCtx, expr: Sexp) -> Result<Type> {
         Sexp::Empty => Err(anyhow::anyhow!("empty expression")),
     };
     if let Ok(infer) = &ret {
-        println!("do_infer {}: {}", &expr, infer);
+        println!("= {}: {:?}", &expr, alloc[*infer]);
     }
     ret
 }
 
-/// 単一化: 2つの型が一致するようななるべく小さな型代入を見つける
-fn unify(ctx: &InferCtx, t: &Type, u: &Type) -> Result<Type> {
-    let tp = prune(t);
-    let up = prune(u);
-    // if tp != up {
-    //     return Err(anyhow::anyhow!("type mismatch: {:?} vs {:?}", &tp, &up))?;
-    // }
-    match (&tp, &up) {
-        (Type::Lambda(t_arg, t_ret), Type::Lambda(u_arg, u_ret)) => {
-            let arg = unify(ctx, t_arg, u_arg)?;
-            let ret = unify(ctx, t_ret, u_ret)?;
-            Ok(Type::Lambda(Box::new(arg), Box::new(ret)))
-        }
-        (Type::TypeVar(name, tvar), _) => {
-            if tp != up {
-                if occurs_in_type(&tp, &up) {
-                    return Err(anyhow::anyhow!("recursive unification"));
+fn fresh(alloc: &mut Vec<Type>, t: Id, non_generic: &[Id]) -> Id {
+    let mut mappings: HashMap<Id, Id> = HashMap::new();
+
+    fn fresh_rec(
+        alloc: &mut Vec<Type>,
+        tp: Id,
+        mappings: &mut HashMap<Id, Id>,
+        non_generic: &[Id],
+    ) -> Id {
+        println!("fresh: {}", tp);
+        let p = prune(alloc, tp);
+        match alloc.get(p).unwrap().clone() {
+            Type::Variable { .. } => {
+                if is_generic(alloc, p, non_generic) {
+                    mappings.entry(p).or_insert(new_variable(alloc)).clone()
+                } else {
+                    p
                 }
             }
-            println!("typevar: {}={}", name, u);
-            Ok(Type::TypeVar(name.clone(), Some(Box::new(u.clone()))))
+            Type::Operator {
+                ref name, types, ..
+            } => {
+                let ids = types
+                    .iter()
+                    .map(|t| fresh_rec(alloc, *t, mappings, non_generic))
+                    .collect::<Vec<_>>();
+                new_operator(alloc, name, &ids)
+            }
         }
-        (_, Type::TypeVar(..)) => unify(ctx, u, t),
-        _ => Err(anyhow::anyhow!("unify error: {:?}, {:?}", t, u)),
+    }
+
+    fresh_rec(alloc, t, &mut mappings, non_generic)
+}
+
+/// 単一化: 2つの型が一致するようななるべく小さな型代入を見つける
+fn unify(alloc: &mut Vec<Type>, t: Id, s: Id) -> Result<()> {
+    let (a, b) = (prune(alloc, t), prune(alloc, s));
+    match (alloc.get(a).unwrap().clone(), alloc.get(b).unwrap().clone()) {
+        (Type::Variable { .. }, _) => {
+            if a != b {
+                if occurs_in_type(alloc, a, b) {
+                    panic!("recursive unification")
+                }
+                alloc.get_mut(a).unwrap().set_instance(b);
+            }
+            Ok(())
+        }
+        (Type::Operator { .. }, Type::Variable { .. }) => unify(alloc, s, t),
+        (
+            Type::Operator {
+                name: a_name,
+                types: a_types,
+                ..
+            },
+            Type::Operator {
+                name: b_name,
+                types: b_types,
+                ..
+            },
+        ) => {
+            if a_name != b_name || a_types.len() != b_types.len() {
+                return Err(anyhow::anyhow!("type mismatch: {} != {}", a_name, b_name));
+            }
+            a_types
+                .iter()
+                .zip(b_types.iter())
+                .map(|(aa, bb)| unify(alloc, *aa, *bb))
+                .collect::<Result<_>>()
+        }
     }
 }
 
-/// 型を具体的にする
-fn prune(typ: &Type) -> Type {
-    if let Type::TypeVar(_, tvar) = typ {
-        if let Some(t) = tvar {
-            return prune(t);
-        }
+/// returns an instance of t
+fn prune(alloc: &mut Vec<Type>, t: Id) -> Id {
+    let inner = if let Type::Variable { instance, .. } = alloc.get(t).unwrap() {
+        instance.unwrap_or(t)
+    } else {
+        return t;
+    };
+    let ret = prune(alloc, inner);
+    if let Type::Variable { instance, .. } = alloc.get_mut(t).unwrap() {
+        *instance = Some(ret);
+    } else {
+        return t;
     }
-    typ.clone()
+    ret
 }
 
-fn is_generic(ctx: &InferCtx, typ: &Type) -> bool {
-    ctx.references
-        .iter()
-        .map(|(_, t)| occurs_in_type(t, typ))
-        .any(|x| x)
+fn is_generic(alloc: &mut Vec<Type>, id: Id, non_generic: &[Id]) -> bool {
+    !occurs_in(alloc, id, non_generic)
+}
+
+fn occurs_in(alloc: &mut Vec<Type>, id: Id, types: &[Id]) -> bool {
+    types.iter().any(|t| occurs_in_type(alloc, id, *t))
 }
 
 /// typ 中に type_var が含まれているか
-fn occurs_in_type(var: &Type, typ: &Type) -> bool {
-    // prune(typ);
-    if typ == var {
+fn occurs_in_type(alloc: &mut Vec<Type>, v: Id, t: Id) -> bool {
+    let prune_t = prune(alloc, t);
+    if prune_t == v {
         return true;
     }
-    if let Type::Lambda(arg_type, ret_type) = typ {
-        let r1 = occurs_in_type(var, arg_type);
-        let r2 = occurs_in_type(var, ret_type);
-        return r1 || r2;
+    if let Type::Operator { types, .. } = alloc.get(prune_t).unwrap().clone() {
+        return occurs_in(alloc, v, &types);
     } else {
         return false;
     }
@@ -200,35 +200,42 @@ fn occurs_in_type(var: &Type, typ: &Type) -> bool {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+
     use anyhow::Result;
     use symbolic_expressions::parser::parse_str;
 
     use crate::{
-        infer::{infer, InferCtx},
-        types::{typ, Type},
+        infer::{analyse, default_env},
+        types::Issuer,
     };
 
-    fn should_infer(expr: &str, typ: Type) -> Result<()> {
-        let mut ctx = InferCtx::new();
+    fn should_infer(expr: &str, typ: &str) -> Result<()> {
+        let (mut alloc, env) = default_env();
         let exp = parse_str(expr)?;
-        let infer_typ = infer(&mut ctx, exp)?;
-        println!("infer: {}", infer_typ);
-        assert_eq!(infer_typ, typ);
+        let id = analyse(&mut alloc, &exp, &env, &HashSet::new())?;
+        dbg!(id);
+        assert_eq!(alloc[id].as_string(&alloc, &mut Issuer::new('a')), typ);
         Ok(())
     }
 
     #[test]
     fn test_type_var() -> Result<()> {
-        should_infer("true", Type::bool())
+        should_infer("true", "bool")
     }
 
     #[test]
     fn test_type_lambda() -> Result<()> {
-        should_infer("(lam x 1)", typ("t1").to(Type::int()))
+        should_infer("(lam x 1)", "(a -> int)")
     }
 
     #[test]
     fn test_type_not() -> Result<()> {
-        should_infer("(lam x (app not x))", Type::bool().to(Type::bool()))
+        should_infer("(lam x (app not x))", "(bool -> bool)")
+    }
+
+    #[test]
+    fn test_type_app() -> Result<()> {
+        should_infer("(let a (app succ 1) a)", "int")
     }
 }

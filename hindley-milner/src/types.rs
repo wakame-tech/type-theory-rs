@@ -1,68 +1,134 @@
-use std::{fmt::Display, sync::atomic::AtomicUsize};
+use std::collections::HashMap;
+
+pub type Id = usize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Type {
-    Primitive(String),
-    TypeVar(String, Option<Box<Type>>),
-    // arg ret
-    Lambda(Box<Type>, Box<Type>),
+    Variable {
+        id: Id,
+        instance: Option<Id>,
+    },
+    Operator {
+        id: Id,
+        name: String,
+        types: Vec<Id>,
+    },
+}
+
+pub struct Issuer {
+    pub value: u8,
+    pub set: HashMap<Id, String>,
+}
+
+impl Issuer {
+    pub fn new(start: char) -> Self {
+        Issuer {
+            value: start as u8,
+            set: HashMap::new(),
+        }
+    }
+
+    fn next(&mut self) -> String {
+        let id = self.value;
+        self.value += 1;
+        format!("{}", id as char)
+    }
+
+    /// get or create
+    fn name(&mut self, id: Id) -> String {
+        if let Some(name) = self.set.get(&id) {
+            name.clone()
+        } else {
+            let name = self.next();
+            self.set.insert(id, name.clone());
+            name
+        }
+    }
 }
 
 impl Type {
-    pub fn bool() -> Type {
-        Type::Primitive("bool".to_string())
+    pub fn var(id: Id) -> Type {
+        Type::Variable { id, instance: None }
     }
 
-    pub fn int() -> Type {
-        Type::Primitive("int".to_string())
-    }
-
-    pub fn to(&self, ret: Type) -> Type {
-        Type::Lambda(Box::new(self.clone()), Box::new(ret))
-    }
-
-    pub fn ret_type(&self) -> Option<Type> {
-        if let Type::Lambda(_, ret) = self {
-            return Some(*ret.clone());
+    pub fn fun(id: Id, arg: Id, ret: Id) -> Type {
+        Type::Operator {
+            id,
+            name: "->".to_string(),
+            types: vec![arg, ret],
         }
-        None
     }
 
-    pub fn arg_type(&self) -> Option<Type> {
-        if let Type::Lambda(arg, _) = self {
-            return Some(*arg.clone());
+    pub fn op(id: Id, name: &str, types: &[Id]) -> Type {
+        Type::Operator {
+            id,
+            name: name.to_string(),
+            types: types.to_vec(),
         }
-        None
     }
-}
 
-static TYPE_VAR_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-pub fn typ(t: &str) -> Type {
-    if t.starts_with("t") {
-        return Type::TypeVar(t.to_string(), None);
-    }
-    Type::Primitive(t.to_string())
-}
-
-pub fn type_var() -> (String, Type) {
-    let id = TYPE_VAR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let typ = format!("t{}", id);
-    (typ.clone(), Type::TypeVar(typ, None))
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn id(&self) -> Id {
         match self {
-            Type::Primitive(s) => write!(f, "{}", s),
-            Type::TypeVar(s, typ) => {
-                if let Some(v) = typ {
-                    write!(f, "{}(={})", s, v)
-                } else {
-                    write!(f, "{}(=?)", s)
-                }
-            }
-            Type::Lambda(arg, ret) => write!(f, "({} -> {})", arg, ret),
+            Type::Variable { id, .. } => *id,
+            Type::Operator { id, .. } => *id,
         }
     }
+
+    pub fn set_instance(&mut self, id: Id) {
+        match self {
+            Type::Variable { instance, .. } => {
+                *instance = Some(id);
+            }
+            _ => panic!("set_instance called on non-variable type"),
+        }
+    }
+
+    pub fn as_string(&self, a: &Vec<Type>, issuer: &mut Issuer) -> String {
+        match self {
+            &Type::Variable {
+                instance: Some(inst),
+                ..
+            } => a[inst].as_string(a, issuer),
+            &Type::Variable { .. } => issuer.name(self.id()),
+            &Type::Operator {
+                ref types,
+                ref name,
+                ..
+            } => match types.len() {
+                0 => name.clone(),
+                2 => {
+                    let l = a[types[0]].as_string(a, issuer);
+                    let r = a[types[1]].as_string(a, issuer);
+                    format!("({} {} {})", l, name, r)
+                }
+                _ => {
+                    let mut coll = vec![];
+                    for v in types {
+                        coll.push(a[*v].as_string(a, issuer));
+                    }
+                    format!("{} {}", name, coll.join(" "))
+                }
+            },
+        }
+    }
+}
+
+pub fn new_variable(a: &mut Vec<Type>) -> Id {
+    let id = a.len();
+    a.push(Type::var(id));
+    id
+}
+
+pub fn new_function(a: &mut Vec<Type>, arg: Id, ret: Id) -> Id {
+    let id = a.len();
+    let typ = Type::op(id, "->", &[arg, ret]);
+    a.push(typ);
+    id
+}
+
+pub fn new_operator(a: &mut Vec<Type>, name: &str, types: &[Id]) -> Id {
+    let id = a.len();
+    let typ = Type::op(id, name, types);
+    a.push(typ);
+    id
 }
