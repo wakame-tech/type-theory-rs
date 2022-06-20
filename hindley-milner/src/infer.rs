@@ -43,7 +43,6 @@ pub fn analyse(
     env: &Env,
     non_generic: &HashSet<Id>,
 ) -> Result<Id> {
-    println!("analyse: {}", expr);
     let ret = match &expr {
         Sexp::String(ref name) => Ok(get_type(alloc, name, env, non_generic)),
         Sexp::List(opes) => {
@@ -83,9 +82,6 @@ pub fn analyse(
         }
         Sexp::Empty => Err(anyhow::anyhow!("empty expression")),
     };
-    if let Ok(infer) = &ret {
-        println!("= {}: {:?}", &expr, alloc[*infer]);
-    }
     ret
 }
 
@@ -98,7 +94,6 @@ fn fresh(alloc: &mut Vec<Type>, t: Id, non_generic: &[Id]) -> Id {
         mappings: &mut HashMap<Id, Id>,
         non_generic: &[Id],
     ) -> Id {
-        println!("fresh: {}", tp);
         let p = prune(alloc, tp);
         match alloc.get(p).unwrap().clone() {
             Type::Variable { .. } => {
@@ -125,6 +120,11 @@ fn fresh(alloc: &mut Vec<Type>, t: Id, non_generic: &[Id]) -> Id {
 
 /// 単一化: 2つの型が一致するようななるべく小さな型代入を見つける
 fn unify(alloc: &mut Vec<Type>, t: Id, s: Id) -> Result<()> {
+    println!(
+        "unify: {:?}, {:?}",
+        alloc.get(t).unwrap(),
+        alloc.get(s).unwrap()
+    );
     let (a, b) = (prune(alloc, t), prune(alloc, s));
     match (alloc.get(a).unwrap().clone(), alloc.get(b).unwrap().clone()) {
         (Type::Variable { .. }, _) => {
@@ -163,18 +163,13 @@ fn unify(alloc: &mut Vec<Type>, t: Id, s: Id) -> Result<()> {
 
 /// returns an instance of t
 fn prune(alloc: &mut Vec<Type>, t: Id) -> Id {
-    let inner = if let Type::Variable { instance, .. } = alloc.get(t).unwrap() {
-        instance.unwrap_or(t)
-    } else {
-        return t;
-    };
-    let ret = prune(alloc, inner);
-    if let Type::Variable { instance, .. } = alloc.get_mut(t).unwrap() {
-        *instance = Some(ret);
-    } else {
-        return t;
+    if let Type::Variable { instance, .. } = alloc.clone().get_mut(t).unwrap() {
+        if instance.is_some() {
+            *instance = Some(prune(alloc, instance.unwrap()));
+            return instance.unwrap();
+        }
     }
-    ret
+    t
 }
 
 fn is_generic(alloc: &mut Vec<Type>, id: Id, non_generic: &[Id]) -> bool {
@@ -214,28 +209,42 @@ mod test {
         let (mut alloc, env) = default_env();
         let exp = parse_str(expr)?;
         let id = analyse(&mut alloc, &exp, &env, &HashSet::new())?;
-        dbg!(id);
         assert_eq!(alloc[id].as_string(&alloc, &mut Issuer::new('a')), typ);
         Ok(())
     }
 
     #[test]
-    fn test_type_var() -> Result<()> {
+    fn test_var() -> Result<()> {
         should_infer("true", "bool")
     }
 
     #[test]
-    fn test_type_lambda() -> Result<()> {
+    fn test_lambda() -> Result<()> {
         should_infer("(lam x 1)", "(a -> int)")
     }
 
     #[test]
-    fn test_type_not() -> Result<()> {
+    fn test_app() -> Result<()> {
+        should_infer("(app not true)", "bool")
+    }
+
+    #[test]
+    fn test_not() -> Result<()> {
         should_infer("(lam x (app not x))", "(bool -> bool)")
     }
 
     #[test]
-    fn test_type_app() -> Result<()> {
+    fn test_let_app() -> Result<()> {
         should_infer("(let a (app succ 1) a)", "int")
+    }
+
+    #[test]
+    fn test_tvar() -> Result<()> {
+        should_infer("(app id id)", "(a -> a)")
+    }
+
+    #[test]
+    fn test_lam_tvar() -> Result<()> {
+        should_infer("(lam x (lam y x))", "(a -> (b -> a))")
     }
 }
