@@ -1,29 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::types::{new_function, new_operator, new_variable, Id, Type};
+use crate::{
+    issuer::{new_function, new_operator, new_variable},
+    types::{Env, Id, Type},
+};
 use anyhow::Result;
 use symbolic_expressions::Sexp;
-
-pub fn default_env() -> (Vec<Type>, Env) {
-    let mut alloc = vec![Type::op(0, "int", &[]), Type::op(1, "bool", &[])];
-    let a = new_variable(&mut alloc);
-    let env = Env(HashMap::from([
-        ("true".to_string(), 1),
-        ("false".to_string(), 1),
-        ("not".to_string(), new_function(&mut alloc, 1, 1)),
-        ("id".to_string(), new_function(&mut alloc, a, a)),
-        ("zero?".to_string(), new_function(&mut alloc, 0, 1)),
-        ("succ".to_string(), new_function(&mut alloc, 0, 0)),
-    ]));
-    (alloc, env)
-}
 
 fn is_number(lit: &str) -> bool {
     lit.chars().all(|c| c.is_numeric())
 }
-
-#[derive(Debug, Clone)]
-pub struct Env(HashMap<String, Id>);
 
 fn get_type(a: &mut Vec<Type>, name: &str, env: &Env, non_generic: &HashSet<Id>) -> Id {
     if let Some(value) = env.0.get(name) {
@@ -120,11 +106,6 @@ fn fresh(alloc: &mut Vec<Type>, t: Id, non_generic: &[Id]) -> Id {
 
 /// 単一化: 2つの型が一致するようななるべく小さな型代入を見つける
 fn unify(alloc: &mut Vec<Type>, t: Id, s: Id) -> Result<()> {
-    println!(
-        "unify: {:?}, {:?}",
-        alloc.get(t).unwrap(),
-        alloc.get(s).unwrap()
-    );
     let (a, b) = (prune(alloc, t), prune(alloc, s));
     match (alloc.get(a).unwrap().clone(), alloc.get(b).unwrap().clone()) {
         (Type::Variable { .. }, _) => {
@@ -200,10 +181,7 @@ mod test {
     use anyhow::Result;
     use symbolic_expressions::parser::parse_str;
 
-    use crate::{
-        infer::{analyse, default_env},
-        types::Issuer,
-    };
+    use crate::{infer::analyse, issuer::Issuer, types::default_env};
 
     fn should_infer(expr: &str, typ: &str) -> Result<()> {
         let (mut alloc, env) = default_env();

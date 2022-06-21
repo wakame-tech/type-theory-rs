@@ -1,13 +1,16 @@
-use std::collections::HashMap;
+use std::{cmp::Ordering, collections::HashMap};
 
+use crate::issuer::{new_function, new_variable, Issuer};
+use anyhow::{anyhow, Result};
 pub type Id = usize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash)]
 pub enum Type {
     Variable {
         id: Id,
         instance: Option<Id>,
     },
+    /// ex. function type "->", tuple type ","
     Operator {
         id: Id,
         name: String,
@@ -15,38 +18,23 @@ pub enum Type {
     },
 }
 
-pub struct Issuer {
-    pub value: u8,
-    pub set: HashMap<Id, String>,
-}
-
-impl Issuer {
-    pub fn new(start: char) -> Self {
-        Issuer {
-            value: start as u8,
-            set: HashMap::new(),
-        }
-    }
-
-    fn next(&mut self) -> String {
-        let id = self.value;
-        self.value += 1;
-        format!("{}", id as char)
-    }
-
-    /// get or create
-    fn name(&mut self, id: Id) -> String {
-        if let Some(name) = self.set.get(&id) {
-            name.clone()
-        } else {
-            let name = self.next();
-            self.set.insert(id, name.clone());
-            name
-        }
-    }
-}
-
 impl Type {
+    /// type parser
+    pub fn from(alloc: &Vec<Type>, expr: &str) -> Result<Type> {
+        // TODO: composite type parser
+        if let Some(typ) = alloc.iter().find(|ty| match ty {
+            Type::Operator {
+                id: _,
+                name,
+                types: _,
+            } => name == expr,
+            _ => todo!(),
+        }) {
+            return Ok(typ.clone());
+        }
+        todo!()
+    }
+
     pub fn var(id: Id) -> Type {
         Type::Variable { id, instance: None }
     }
@@ -113,22 +101,79 @@ impl Type {
     }
 }
 
-pub fn new_variable(a: &mut Vec<Type>) -> Id {
-    let id = a.len();
-    a.push(Type::var(id));
-    id
+#[derive(Debug, Clone)]
+pub struct Env(pub HashMap<String, Id>);
+
+pub fn default_env() -> (Vec<Type>, Env) {
+    // TODO: type hierarchy
+    let mut alloc = vec![Type::op(0, "int", &[]), Type::op(1, "bool", &[])];
+    let a = new_variable(&mut alloc);
+    let env = Env(HashMap::from([
+        ("true".to_string(), 1),
+        ("false".to_string(), 1),
+        ("not".to_string(), new_function(&mut alloc, 1, 1)),
+        ("id".to_string(), new_function(&mut alloc, a, a)),
+        ("zero?".to_string(), new_function(&mut alloc, 0, 1)),
+        ("succ".to_string(), new_function(&mut alloc, 0, 0)),
+    ]));
+    (alloc, env)
 }
 
-pub fn new_function(a: &mut Vec<Type>, arg: Id, ret: Id) -> Id {
-    let id = a.len();
-    let typ = Type::op(id, "->", &[arg, ret]);
-    a.push(typ);
-    id
+pub trait TypeOrd {
+    fn cmp(&self, other: &Type) -> Ordering;
 }
 
-pub fn new_operator(a: &mut Vec<Type>, name: &str, types: &[Id]) -> Id {
-    let id = a.len();
-    let typ = Type::op(id, name, types);
-    a.push(typ);
-    id
+pub trait TypeEq {
+    fn eq(&self, other: &Type) -> bool;
+}
+
+impl TypeEq for Type {
+    fn eq(&self, other: &Type) -> bool {
+        match (self, other) {
+            (Type::Operator { id: l, .. }, Type::Operator { id: r, .. }) => l == r,
+            _ => todo!(),
+        }
+    }
+}
+
+impl TypeOrd for Type {
+    fn cmp(&self, other: &Type) -> Ordering {
+        match (self, other) {
+            (Type::Operator { id: l, .. }, Type::Operator { id: r, .. }) => {
+                if l == r {
+                    return Ordering::Equal;
+                }
+                todo!()
+            }
+            _ => todo!(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::cmp::Ordering;
+
+    use crate::types::TypeEq;
+
+    use super::{default_env, Type, TypeOrd};
+    use anyhow::Result;
+
+    #[test]
+    fn test_bool_eq() -> Result<()> {
+        let (alloc, env) = default_env();
+        let t1 = Type::from(&alloc, "bool")?;
+        let t2 = Type::from(&alloc, "bool")?;
+        assert_eq!(t1.eq(&t2), true);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bool_neq() -> Result<()> {
+        let (alloc, env) = default_env();
+        let t1 = Type::from(&alloc, "int")?;
+        let t2 = Type::from(&alloc, "bool")?;
+        assert_eq!(t1.eq(&t2), false);
+        Ok(())
+    }
 }
