@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    fmt::{write, Display},
-};
+use std::{cmp::Ordering, fmt::Display};
 
 use crate::issuer::Issuer;
 use anyhow::Result;
@@ -22,20 +19,20 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn from_id(alloc: &Vec<Type>, id: Id) -> Option<Type> {
+        alloc.get(id).map(|t| t.clone())
+    }
+
     /// type parser
     pub fn from(alloc: &Vec<Type>, expr: &str) -> Result<Type> {
         // TODO: composite type parser
-        if let Some(typ) = alloc.iter().find(|ty| match ty {
-            Type::Operator {
-                id: _,
-                name,
-                types: _,
-            } => name == expr,
-            _ => todo!(),
-        }) {
+        if let Some(typ) = alloc
+            .iter()
+            .find(|ty| ty.as_string(alloc, &mut Issuer::new('a')) == expr)
+        {
             return Ok(typ.clone());
         } else {
-            return Err(anyhow::anyhow!("type {} not found", expr));
+            return Err(anyhow::anyhow!("type \"{}\" not found", expr));
         }
     }
 
@@ -107,7 +104,18 @@ impl Type {
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{}", self.id())
+        match self {
+            Type::Operator { id, name, .. } => {
+                write!(f, "{} #{}", name, id)
+            }
+            Type::Variable { id, instance } => {
+                if let Some(inst) = instance {
+                    write!(f, "#{}", inst)
+                } else {
+                    write!(f, "#{}", id)
+                }
+            }
+        }
     }
 }
 

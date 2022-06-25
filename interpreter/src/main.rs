@@ -11,7 +11,9 @@ fn main() -> Result<()> {
         // "(let a int 1)"
         // "(+ 1 2)",
         // "(let a int 1)",
-        "(app (lam ((: x int)) x) 1)",
+        // "(let x (app zero? 3))",
+        "(let a (app zero? 1))",
+        // "(app (lam ((: x int)) x) 1)",
     ];
     let mut env = InterpreterEnv::new();
     interpreter::interpret(&mut env, &sexps)?;

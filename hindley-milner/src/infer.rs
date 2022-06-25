@@ -43,16 +43,32 @@ pub fn analyse(
                     unify(alloc, new_fn_type, fn_type)?;
                     Ok(ret)
                 }
+                // (lam (: x int) x)
                 "lam" => {
-                    let (arg, body) = (opes[1].string()?, &opes[2]);
-                    let arg_type_id = new_variable(alloc);
-                    let mut new_env = env.clone();
-                    new_env.0.insert(arg.clone(), arg_type_id);
+                    // parameter type annotation omitted
+                    if opes[1].is_string() {
+                        let (arg, body) = (opes[1].string()?, &opes[2]);
+                        let arg_type_id = new_variable(alloc);
+                        let mut new_env = env.clone();
+                        new_env.0.insert(arg.clone(), arg_type_id);
 
-                    let mut new_non_generic = non_generic.clone();
-                    new_non_generic.insert(arg_type_id);
-                    let ret = analyse(alloc, body, &new_env, &new_non_generic)?;
-                    Ok(new_function(alloc, arg_type_id, ret))
+                        let mut new_non_generic = non_generic.clone();
+                        new_non_generic.insert(arg_type_id);
+                        let ret = analyse(alloc, body, &new_env, &new_non_generic)?;
+                        Ok(new_function(alloc, arg_type_id, ret))
+                    } else {
+                        let (param, body) = (opes[1].list()?, &opes[2]);
+                        let (arg, arg_type) = (param[1].string()?, param[2].string()?);
+                        let arg_type = Type::from(alloc, arg_type)?;
+                        let arg_type_id = arg_type.id();
+                        let mut new_env = env.clone();
+                        new_env.0.insert(arg.clone(), arg_type_id);
+
+                        let mut new_non_generic = non_generic.clone();
+                        new_non_generic.insert(arg_type_id);
+                        let ret = analyse(alloc, body, &new_env, &new_non_generic)?;
+                        Ok(new_function(alloc, arg_type_id, ret))
+                    }
                 }
                 "let" => {
                     let (v, defn, body) = (&opes[1], &opes[2], &opes[3]);
@@ -63,7 +79,7 @@ pub fn analyse(
                         .insert(v.string().unwrap().to_string(), defn_type_id);
                     analyse(alloc, body, &new_env, non_generic)
                 }
-                _ => Err(anyhow::anyhow!("unknown operator: {}", op)),
+                _ => Err(anyhow::anyhow!("[analyse] unknown operator: {}", op)),
             }
         }
         Sexp::Empty => Err(anyhow::anyhow!("empty expression")),
@@ -215,6 +231,11 @@ mod test {
     #[test]
     fn test_let_app() -> Result<()> {
         should_infer("(let a (app succ 1) a)", "int")
+    }
+
+    #[test]
+    fn test_iszero() -> Result<()> {
+        should_infer("(app zero? 0)", "bool")
     }
 
     #[test]

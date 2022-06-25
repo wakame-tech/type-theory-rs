@@ -1,9 +1,9 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use rand::{distributions::Alphanumeric, Rng};
 use symbolic_expressions::parser::parse_str;
 
 use crate::{
-    ast::{from_expr, Eval, Expr, FnApp, FnDef, IntrinsicFn, Let, Program},
+    ast::{from_expr, Eval, Expr, FnApp, FnDef, IntrinsicFn, Let, Program, Value},
     interpreter_env::InterpreterEnv,
     into_ast::into_ast,
 };
@@ -28,10 +28,7 @@ impl Eval for Let {
     // (let a int 1)
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         let val = eval_expr(env, &self.value)?.literal()?;
-
-        let typ = &self.typ.clone().unwrap_or_else(|| todo!("type inference"));
-
-        env.new_var(self.name.clone(), typ.clone(), val);
+        env.new_var(self.name.clone(), self.typ_id, val);
         Ok(Expr::Variable(self.name.clone()))
     }
 }
@@ -55,10 +52,18 @@ impl Eval for FnApp {
             let mut env = env.clone();
             // intrinsic function
             match fun.intrinsic {
-                Some(IntrinsicFn::Add) => Ok(Expr::Literal(param[0] + param[1])),
+                Some(IntrinsicFn::Add) => Ok(Expr::Literal(Value::Int(
+                    param[0].as_int()? + param[1].as_int()?,
+                ))),
+                Some(IntrinsicFn::Eq) => Ok(Expr::Literal(Value::Bool(
+                    param[0].as_int()? == param[1].as_int()?,
+                ))),
+                Some(IntrinsicFn::IsZero) => {
+                    Ok(Expr::Literal(Value::Bool(param[0].as_int()? == 0)))
+                }
                 None => {
                     for (param, val) in fun.params.iter().zip(param) {
-                        env.new_var(param.name.clone(), param.typ.clone(), val);
+                        env.new_var(param.name.clone(), param.typ_id.clone(), val);
                     }
                     let ret = eval_expr(&mut env, &fun.body);
                     println!("{} env\n {}", self.fun, env);
@@ -92,6 +97,7 @@ pub fn interpret(env: &mut InterpreterEnv, sexps: &Vec<&str>) -> Result<()> {
         .iter()
         .map(|s| parse_str(s).map_err(|e| anyhow::anyhow!(e)))
         .collect::<Result<Vec<_>>>()?;
+
     let program = Program(
         sexps
             .iter()
