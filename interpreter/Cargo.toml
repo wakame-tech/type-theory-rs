@@ -10,3 +10,4 @@ symbolic_expressions = "5.0.3"
 anyhow = "1"
 structural-typesystem = { path = "../structural-typesystem" }
 hindley-milner = { path = "../hindley-milner" }
+rand = "0.8.5"

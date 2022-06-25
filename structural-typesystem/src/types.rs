@@ -1,4 +1,7 @@
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    fmt::{write, Display},
+};
 
 use crate::issuer::Issuer;
 use anyhow::Result;
@@ -31,8 +34,9 @@ impl Type {
             _ => todo!(),
         }) {
             return Ok(typ.clone());
+        } else {
+            return Err(anyhow::anyhow!("type {} not found", expr));
         }
-        todo!()
     }
 
     pub fn var(id: Id) -> Type {
@@ -98,6 +102,12 @@ impl Type {
                 }
             },
         }
+    }
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}", self.id())
     }
 }
 

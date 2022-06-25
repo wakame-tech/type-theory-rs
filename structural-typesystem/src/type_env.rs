@@ -6,13 +6,13 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Env(pub HashMap<String, Id>);
+pub struct TypeEnv(pub HashMap<String, Id>);
 
-pub fn default_env() -> (Vec<Type>, Env) {
+pub fn default_env() -> (Vec<Type>, TypeEnv) {
     // TODO: type hierarchy
     let mut alloc = vec![Type::op(0, "int", &[]), Type::op(1, "bool", &[])];
     let a = new_variable(&mut alloc);
-    let env = Env(HashMap::from([
+    let env = TypeEnv(HashMap::from([
         ("true".to_string(), 1),
         ("false".to_string(), 1),
         ("not".to_string(), new_function(&mut alloc, 1, 1)),

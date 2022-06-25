@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use structural_typesystem::{
     issuer::{new_function, new_operator, new_variable},
-    type_env::Env,
+    type_env::TypeEnv,
     types::{Id, Type},
 };
 use symbolic_expressions::Sexp;
@@ -11,7 +11,7 @@ fn is_number(lit: &str) -> bool {
     lit.chars().all(|c| c.is_numeric())
 }
 
-fn get_type(a: &mut Vec<Type>, name: &str, env: &Env, non_generic: &HashSet<Id>) -> Id {
+fn get_type(a: &mut Vec<Type>, name: &str, env: &TypeEnv, non_generic: &HashSet<Id>) -> Id {
     if let Some(value) = env.0.get(name) {
         let ng = non_generic.iter().cloned().collect::<Vec<_>>();
         fresh(a, *value, &ng)
@@ -26,7 +26,7 @@ fn get_type(a: &mut Vec<Type>, name: &str, env: &Env, non_generic: &HashSet<Id>)
 pub fn analyse(
     alloc: &mut Vec<Type>,
     expr: &Sexp,
-    env: &Env,
+    env: &TypeEnv,
     non_generic: &HashSet<Id>,
 ) -> Result<Id> {
     let ret = match &expr {
