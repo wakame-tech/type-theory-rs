@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
-
-use crate::{
-    issuer::{new_function, new_operator, new_variable},
-    types::{Env, Id, Type},
-};
 use anyhow::Result;
+use std::collections::{HashMap, HashSet};
+use structural_typesystem::{
+    issuer::{new_function, new_operator, new_variable},
+    type_env::Env,
+    types::{Id, Type},
+};
 use symbolic_expressions::Sexp;
 
 fn is_number(lit: &str) -> bool {
@@ -179,9 +179,10 @@ mod test {
     use std::collections::HashSet;
 
     use anyhow::Result;
+    use structural_typesystem::{issuer::Issuer, type_env::default_env};
     use symbolic_expressions::parser::parse_str;
 
-    use crate::{infer::analyse, issuer::Issuer, types::default_env};
+    use crate::infer::analyse;
 
     fn should_infer(expr: &str, typ: &str) -> Result<()> {
         let (mut alloc, env) = default_env();

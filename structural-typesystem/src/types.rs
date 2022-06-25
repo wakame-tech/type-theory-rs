@@ -1,7 +1,7 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::cmp::Ordering;
 
-use crate::issuer::{new_function, new_variable, Issuer};
-use anyhow::{anyhow, Result};
+use crate::issuer::Issuer;
+use anyhow::Result;
 pub type Id = usize;
 
 #[derive(Debug, Clone, Hash)]
@@ -101,24 +101,6 @@ impl Type {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Env(pub HashMap<String, Id>);
-
-pub fn default_env() -> (Vec<Type>, Env) {
-    // TODO: type hierarchy
-    let mut alloc = vec![Type::op(0, "int", &[]), Type::op(1, "bool", &[])];
-    let a = new_variable(&mut alloc);
-    let env = Env(HashMap::from([
-        ("true".to_string(), 1),
-        ("false".to_string(), 1),
-        ("not".to_string(), new_function(&mut alloc, 1, 1)),
-        ("id".to_string(), new_function(&mut alloc, a, a)),
-        ("zero?".to_string(), new_function(&mut alloc, 0, 1)),
-        ("succ".to_string(), new_function(&mut alloc, 0, 0)),
-    ]));
-    (alloc, env)
-}
-
 pub trait TypeOrd {
     fn cmp(&self, other: &Type) -> Ordering;
 }
@@ -152,11 +134,11 @@ impl TypeOrd for Type {
 
 #[cfg(test)]
 mod test {
-    use std::cmp::Ordering;
+    use crate::{
+        type_env::default_env,
+        types::{Type, TypeEq},
+    };
 
-    use crate::types::TypeEq;
-
-    use super::{default_env, Type, TypeOrd};
     use anyhow::Result;
 
     #[test]

@@ -13,7 +13,25 @@ name = "hindley-milner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "structural-typesystem",
  "symbolic_expressions",
+]
+
+[[package]]
+name = "interpreter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hindley-milner",
+ "structural-typesystem",
+ "symbolic_expressions",
+]
+
+[[package]]
+name = "structural-typesystem"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
 ]
 
 [[package]]
