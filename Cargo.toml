@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "ast",
   "structural-typesystem",
   "hindley-milner",
   "interpreter",
