@@ -1,74 +1,74 @@
 use anyhow::Result;
+use ast::ast::{FnDef, Value};
 use std::{collections::HashMap, fmt::Display};
-use structural_typesystem::{
-    issuer::{new_variable, Issuer},
-    type_env::{default_env, TypeEnv},
-    types::{Id, Type},
-};
-
-use crate::ast::{Expr, FnDef, Parameter, Value};
+use structural_typesystem::{type_alloc::TypeAlloc, type_env::TypeEnv, types::Id};
 
 #[derive(Debug, Clone)]
 pub struct InterpreterEnv {
-    pub alloc: Vec<Type>,
+    pub alloc: TypeAlloc,
     pub type_env: TypeEnv,
     pub variables: HashMap<String, (Id, Value)>,
     pub functions: HashMap<String, FnDef>,
 }
 
-impl InterpreterEnv {
-    fn intrinsic_fn(alloc: &mut Vec<Type>) -> Result<HashMap<String, FnDef>> {
-        let int = Type::from(alloc, "int")?;
-        let a = new_variable(alloc);
-
-        let mut fns: HashMap<String, FnDef> = HashMap::new();
-        fns.insert(
-            "+".to_string(),
-            FnDef::new_intrinsic(
-                crate::ast::IntrinsicFn::Add,
-                vec![
-                    Parameter::new("left".to_string(), int.id()),
-                    Parameter::new("right".to_string(), int.id()),
-                ],
-                Box::new(Expr::Literal(Value::Int(0))),
-            ),
-        );
-        fns.insert(
-            "=".to_string(),
-            FnDef::new_intrinsic(
-                crate::ast::IntrinsicFn::Eq,
-                vec![
-                    Parameter::new("left".to_string(), a),
-                    Parameter::new("right".to_string(), a),
-                ],
-                Box::new(Expr::Literal(Value::Int(0))),
-            ),
-        );
-        fns.insert(
-            "zero?".to_string(),
-            FnDef::new_intrinsic(
-                crate::ast::IntrinsicFn::IsZero,
-                vec![Parameter::new("value".to_string(), int.id())],
-                Box::new(Expr::Literal(Value::Int(0))),
-            ),
-        );
-        Ok(fns)
-    }
-
-    pub fn new() -> Self {
-        let (mut alloc, type_env) = default_env();
-
-        let functions = Self::intrinsic_fn(&mut alloc).unwrap();
-        Self {
-            alloc,
-            type_env,
+impl Default for InterpreterEnv {
+    fn default() -> Self {
+        let mut env = InterpreterEnv {
+            alloc: Default::default(),
+            type_env: Default::default(),
             variables: HashMap::new(),
-            functions,
-        }
+            functions: HashMap::new(),
+        };
+        register_intrinsic_fns(&mut env).unwrap();
+        env
     }
+}
 
+fn register_intrinsic_fns(env: &mut InterpreterEnv) -> Result<()> {
+    return Ok(());
+
+    // let int = env.alloc.from("int")?;
+    // let a = env.alloc.new_variable();
+
+    // let mut fns: HashMap<String, FnDef> = HashMap::new();
+    // let sexp = parse_str("(lam (left : int) lam (right : int) (+ left right))")?;
+    // let ast = into_ast(alloc, &sexp).unwrap();
+    // fns.insert(
+    //     "+".to_string(),
+    //     FnDef::new(
+    //         IntrinsicFn::Add,
+    //         vec![
+    //             Parameter::new("left".to_string(), int.id()),
+    //             Parameter::new("right".to_string(), int.id()),
+    //         ],
+    //         Box::new(Expr::Literal(Value::Int(0))),
+    //     ),
+    // );
+    // fns.insert(
+    //     "=".to_string(),
+    //     FnDef::new_intrinsic(
+    //         IntrinsicFn::Eq,
+    //         vec![
+    //             Parameter::new("left".to_string(), a),
+    //             Parameter::new("right".to_string(), a),
+    //         ],
+    //         Box::new(Expr::Literal(Value::Int(0))),
+    //     ),
+    // );
+    // fns.insert(
+    //     "zero?".to_string(),
+    //     FnDef::new_intrinsic(
+    //         IntrinsicFn::IsZero,
+    //         vec![Parameter::new("value".to_string(), int.id())],
+    //         Box::new(Expr::Literal(Value::Int(0))),
+    //     ),
+    // );
+    // Ok(())
+}
+
+impl InterpreterEnv {
     pub fn new_var(&mut self, name: String, typ_id: Id, val: Value) {
-        self.type_env.0.insert(name.clone(), typ_id);
+        self.type_env.register(&name, typ_id);
         self.variables.insert(name, (typ_id, val));
     }
 }
@@ -77,19 +77,9 @@ impl Display for InterpreterEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "[env]")?;
         writeln!(f, "type_env:")?;
-        for (k, v) in &self.type_env.0 {
+        for (k, v) in &self.type_env.id_map {
             writeln!(f, "{} = #{}", k, v)?;
         }
-        writeln!(f, "alloc:")?;
-        for typ in &self.alloc {
-            writeln!(
-                f,
-                "#{} = {}",
-                typ.id(),
-                typ.as_string(&self.alloc, &mut Issuer::new('a'))
-            )?;
-        }
-
         writeln!(f, "variables:")?;
         for (name, (typ_id, v)) in &self.variables {
             writeln!(f, "\t{}: #{} = {}\n", name, typ_id, v)?;

@@ -1,12 +1,11 @@
+use crate::{eval::Eval, interpreter_env::InterpreterEnv};
 use anyhow::{Ok, Result};
-use rand::{distributions::Alphanumeric, Rng};
-use symbolic_expressions::parser::parse_str;
-
-use crate::{
-    ast::{from_expr, Eval, Expr, FnApp, FnDef, IntrinsicFn, Let, Program, Value},
-    interpreter_env::InterpreterEnv,
+use ast::{
+    ast::{from_expr, Expr, FnApp, FnDef, Let, Program},
     into_ast::into_ast,
 };
+use rand::{distributions::Alphanumeric, Rng};
+use symbolic_expressions::parser::parse_str;
 
 fn random_name() -> String {
     rand::thread_rng()
@@ -28,51 +27,36 @@ impl Eval for Let {
     // (let a int 1)
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         let val = eval_expr(env, &self.value)?.literal()?;
-        env.new_var(self.name.clone(), self.typ_id, val);
+        env.new_var(self.name.clone(), val.type_id, val);
         Ok(Expr::Variable(self.name.clone()))
     }
 }
 
 impl Eval for FnApp {
-    // (+ 1 2) => (app + 1 2) => 3
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         let param = self
             .args
             .iter()
             .map(|arg| eval_expr(env, arg).and_then(|arg| from_expr(&arg)))
             .collect::<Result<Vec<_>>>()?;
-        if let Some(fun) = match &*self.fun {
+
+        let Some(fun) = (match &*self.fun {
             Expr::Variable(fn_name) => env.functions.get(fn_name),
             Expr::FnDef(fndef) => {
                 let name = fndef.eval(env)?.name()?;
                 env.functions.get(&name)
             }
             _ => return Err(anyhow::anyhow!("{} is not callable", self.fun)),
-        } {
-            let mut env = env.clone();
-            // intrinsic function
-            match fun.intrinsic {
-                Some(IntrinsicFn::Add) => Ok(Expr::Literal(Value::Int(
-                    param[0].as_int()? + param[1].as_int()?,
-                ))),
-                Some(IntrinsicFn::Eq) => Ok(Expr::Literal(Value::Bool(
-                    param[0].as_int()? == param[1].as_int()?,
-                ))),
-                Some(IntrinsicFn::IsZero) => {
-                    Ok(Expr::Literal(Value::Bool(param[0].as_int()? == 0)))
-                }
-                None => {
-                    for (param, val) in fun.params.iter().zip(param) {
-                        env.new_var(param.name.clone(), param.typ_id.clone(), val);
-                    }
-                    let ret = eval_expr(&mut env, &fun.body);
-                    println!("{} env\n {}", self.fun, env);
-                    ret
-                }
-            }
-        } else {
+        }) else {
             return Err(anyhow::anyhow!("{} is not found", self.fun));
+        };
+        let mut env = env.clone();
+        for (param, val) in fun.params.iter().zip(param) {
+            env.new_var(param.name.clone(), param.typ_id.clone(), val);
         }
+        let ret = eval_expr(&mut env, &fun.body);
+        println!("{} env\n {}", self.fun, env);
+        ret
     }
 }
 
@@ -81,10 +65,10 @@ pub fn eval_expr(env: &mut InterpreterEnv, expr: &Expr) -> Result<Expr> {
         Expr::FnDef(fndef) => fndef.eval(env),
         Expr::Let(r#let) => r#let.eval(env),
         Expr::FnApp(fnapp) => fnapp.eval(env),
-        Expr::Literal(lit) => Ok(Expr::Literal(*lit)),
+        Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
         Expr::Variable(var) => {
             if let Some((_, v)) = env.variables.get(var) {
-                Ok(Expr::Literal(*v))
+                Ok(Expr::Literal(v.clone()))
             } else {
                 Err(anyhow::anyhow!("variable {} not found", var))
             }
@@ -101,7 +85,7 @@ pub fn interpret(env: &mut InterpreterEnv, sexps: &Vec<&str>) -> Result<()> {
     let program = Program(
         sexps
             .iter()
-            .map(|s| into_ast(env, s))
+            .map(|s| into_ast(&mut env.alloc, s))
             .collect::<Result<Vec<_>>>()?,
     );
 
