@@ -1,7 +1,5 @@
-use std::{cmp::Ordering, fmt::Display};
+use std::fmt::Display;
 
-use crate::issuer::Issuer;
-use anyhow::Result;
 pub type Id = usize;
 
 #[derive(Debug, Clone, Hash)]
@@ -16,50 +14,23 @@ pub enum Type {
         name: String,
         types: Vec<Id>,
     },
+    Record {
+        id: Id,
+        types: Vec<(String, Type)>,
+    },
 }
 
 impl Type {
-    pub fn from_id(alloc: &Vec<Type>, id: Id) -> Option<Type> {
-        alloc.get(id).map(|t| t.clone())
-    }
-
-    /// type parser
-    pub fn from(alloc: &Vec<Type>, expr: &str) -> Result<Type> {
-        // TODO: composite type parser
-        if let Some(typ) = alloc
-            .iter()
-            .find(|ty| ty.as_string(alloc, &mut Issuer::new('a')) == expr)
-        {
-            return Ok(typ.clone());
-        } else {
-            return Err(anyhow::anyhow!("type \"{}\" not found", expr));
-        }
-    }
-
+    /// create a new type variable
     pub fn var(id: Id) -> Type {
         Type::Variable { id, instance: None }
-    }
-
-    pub fn fun(id: Id, arg: Id, ret: Id) -> Type {
-        Type::Operator {
-            id,
-            name: "->".to_string(),
-            types: vec![arg, ret],
-        }
-    }
-
-    pub fn op(id: Id, name: &str, types: &[Id]) -> Type {
-        Type::Operator {
-            id,
-            name: name.to_string(),
-            types: types.to_vec(),
-        }
     }
 
     pub fn id(&self) -> Id {
         match self {
             Type::Variable { id, .. } => *id,
             Type::Operator { id, .. } => *id,
+            Type::Record { id, .. } => *id,
         }
     }
 
@@ -71,42 +42,23 @@ impl Type {
             _ => panic!("set_instance called on non-variable type"),
         }
     }
-
-    pub fn as_string(&self, a: &Vec<Type>, issuer: &mut Issuer) -> String {
-        match self {
-            &Type::Variable {
-                instance: Some(inst),
-                ..
-            } => a[inst].as_string(a, issuer),
-            &Type::Variable { .. } => issuer.name(self.id()),
-            &Type::Operator {
-                ref types,
-                ref name,
-                ..
-            } => match types.len() {
-                0 => name.clone(),
-                2 => {
-                    let l = a[types[0]].as_string(a, issuer);
-                    let r = a[types[1]].as_string(a, issuer);
-                    format!("({} {} {})", l, name, r)
-                }
-                _ => {
-                    let mut coll = vec![];
-                    for v in types {
-                        coll.push(a[*v].as_string(a, issuer));
-                    }
-                    format!("{} {}", name, coll.join(" "))
-                }
-            },
-        }
-    }
 }
 
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Operator { id, name, .. } => {
-                write!(f, "{} #{}", name, id)
+            Type::Operator { id, name, types } => {
+                write!(
+                    f,
+                    "{} #{}({})",
+                    name,
+                    id,
+                    types
+                        .iter()
+                        .map(|t| t.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
             }
             Type::Variable { id, instance } => {
                 if let Some(inst) = instance {
@@ -115,65 +67,15 @@ impl Display for Type {
                     write!(f, "#{}", id)
                 }
             }
+            Type::Record { id, types } => write!(
+                f,
+                "#{{{}}}",
+                types
+                    .iter()
+                    .map(|t| t.1.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
         }
-    }
-}
-
-pub trait TypeOrd {
-    fn cmp(&self, other: &Type) -> Ordering;
-}
-
-pub trait TypeEq {
-    fn eq(&self, other: &Type) -> bool;
-}
-
-impl TypeEq for Type {
-    fn eq(&self, other: &Type) -> bool {
-        match (self, other) {
-            (Type::Operator { id: l, .. }, Type::Operator { id: r, .. }) => l == r,
-            _ => todo!(),
-        }
-    }
-}
-
-impl TypeOrd for Type {
-    fn cmp(&self, other: &Type) -> Ordering {
-        match (self, other) {
-            (Type::Operator { id: l, .. }, Type::Operator { id: r, .. }) => {
-                if l == r {
-                    return Ordering::Equal;
-                }
-                todo!()
-            }
-            _ => todo!(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::{
-        type_env::default_env,
-        types::{Type, TypeEq},
-    };
-
-    use anyhow::Result;
-
-    #[test]
-    fn test_bool_eq() -> Result<()> {
-        let (alloc, env) = default_env();
-        let t1 = Type::from(&alloc, "bool")?;
-        let t2 = Type::from(&alloc, "bool")?;
-        assert_eq!(t1.eq(&t2), true);
-        Ok(())
-    }
-
-    #[test]
-    fn test_bool_neq() -> Result<()> {
-        let (alloc, env) = default_env();
-        let t1 = Type::from(&alloc, "int")?;
-        let t2 = Type::from(&alloc, "bool")?;
-        assert_eq!(t1.eq(&t2), false);
-        Ok(())
     }
 }
