@@ -1,5 +1,6 @@
 use crate::{
     issuer::Issuer,
+    type_env::TypeEnv,
     types::{Id, Type, TypeExpr},
 };
 use anyhow::{anyhow, Result};
@@ -11,15 +12,11 @@ pub struct TypeAlloc {
     pub alloc: Vec<Type>,
 }
 
-impl Default for TypeAlloc {
-    fn default() -> Self {
-        let mut res = Self { alloc: vec![] };
-        register_builtin_types(&mut res);
-        res
-    }
-}
-
 impl TypeAlloc {
+    pub fn new() -> Self {
+        Self { alloc: vec![] }
+    }
+
     /// create a new type variable
     pub fn new_variable(&mut self) -> Id {
         let id = self.alloc.len();
@@ -58,7 +55,6 @@ impl TypeAlloc {
 
     /// create a new primitive type
     pub fn new_primitive(&mut self, name: &str) -> Id {
-        println!("new_primitive: {}", name);
         let id = self.alloc.len();
         let typ = Type::Operator {
             id,
@@ -127,13 +123,6 @@ impl TypeAlloc {
     }
 }
 
-/// register builtin types
-pub fn register_builtin_types(alloc: &mut TypeAlloc) {
-    alloc.new_primitive("any");
-    alloc.new_primitive("bool");
-    alloc.new_primitive("int");
-}
-
 #[cfg(test)]
 mod tests {
     use super::TypeAlloc;
@@ -141,7 +130,7 @@ mod tests {
 
     #[test]
     fn parse_fn_type() -> Result<()> {
-        let mut alloc = TypeAlloc::default();
+        let mut alloc = TypeAlloc::new();
         let int_type_id = alloc.from("int")?;
         alloc.new_function(int_type_id, int_type_id);
 

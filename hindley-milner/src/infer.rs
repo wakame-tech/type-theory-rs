@@ -43,7 +43,7 @@ impl HMInferer {
             Expr::FnDef(FnDef { params, body, .. }) => {
                 let arg = params[0].clone();
                 let mut new_env = env.clone();
-                new_env.register(&arg.name, arg.typ_id);
+                new_env.add(&arg.name, arg.typ_id);
 
                 let mut new_non_generic = non_generic.clone();
                 new_non_generic.insert(arg.typ_id);

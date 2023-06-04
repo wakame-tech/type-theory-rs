@@ -66,7 +66,7 @@ fn register_intrinsic_fns(env: &mut InterpreterEnv) -> Result<()> {
 
 impl InterpreterEnv {
     pub fn new_var(&mut self, name: String, expr: Expr) {
-        self.type_env.register(&name, expr.type_id());
+        self.type_env.add(&name, expr.type_id());
         self.variables.insert(name, expr);
     }
 }
