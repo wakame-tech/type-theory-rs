@@ -1,6 +1,9 @@
 use std::fmt::Display;
 
+use symbolic_expressions::Sexp;
+
 pub type Id = usize;
+pub type TypeExpr = Sexp;
 
 #[derive(Debug, Clone, Hash)]
 pub enum Type {

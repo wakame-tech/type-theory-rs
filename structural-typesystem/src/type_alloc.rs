@@ -1,6 +1,6 @@
 use crate::{
     issuer::Issuer,
-    types::{Id, Type},
+    types::{Id, Type, TypeExpr},
 };
 use anyhow::{anyhow, Result};
 use symbolic_expressions::{parser::parse_str, Sexp};
@@ -69,15 +69,15 @@ impl TypeAlloc {
         id
     }
 
-    pub fn from_id(&self, id: Id) -> Option<Type> {
-        self.alloc.get(id).map(|t| t.clone())
+    pub fn from_id(&self, id: Id) -> Result<Type> {
+        self.alloc
+            .get(id)
+            .map(|t| t.clone())
+            .ok_or(anyhow!("type_id {} not found", id))
     }
 
-    pub fn as_sexp(&self, type_id: Id, issuer: &mut Issuer) -> Result<Sexp> {
-        let Some(typ) = self.from_id(type_id) else {
-            return Err(anyhow::anyhow!("type_id {} not found", type_id));
-        };
-        match typ {
+    pub fn as_sexp(&self, type_id: Id, issuer: &mut Issuer) -> Result<TypeExpr> {
+        match self.from_id(type_id)? {
             Type::Variable {
                 instance: Some(inst),
                 ..
@@ -112,7 +112,7 @@ impl TypeAlloc {
     }
 
     /// type parser
-    pub fn from_sexp(&self, type_sexp: &Sexp) -> Result<Id> {
+    pub fn from_sexp(&self, type_sexp: &TypeExpr) -> Result<Id> {
         let typ = self
             .alloc
             .iter()

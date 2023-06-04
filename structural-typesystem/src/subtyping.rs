@@ -1,13 +1,12 @@
+use crate::{type_alloc::TypeAlloc, type_env::TypeEnv, types::Type};
 use std::cmp::Ordering;
 
-use crate::{type_env::TypeEnv, types::Type};
-
 pub trait TypeOrd {
-    fn cmp(&self, env: &TypeEnv, other: &Type) -> Ordering;
+    fn cmp(&self, env: &TypeEnv, alloc: &TypeAlloc, other: &Type) -> Ordering;
 }
 
 pub trait TypeEq {
-    fn eq(&self, env: &TypeEnv, other: &Type) -> bool;
+    fn eq(&self, env: &TypeEnv, alloc: &TypeAlloc, other: &Type) -> bool;
 }
 
 impl TypeEq for Type {
@@ -36,7 +35,6 @@ impl TypeOrd for Type {
 #[cfg(test)]
 mod test {
     use crate::{subtyping::TypeEq, type_env::setup_type_env};
-
     use anyhow::Result;
 
     #[test]

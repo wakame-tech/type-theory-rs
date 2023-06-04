@@ -4,11 +4,11 @@ use interpreter_env::InterpreterEnv;
 use log::debug;
 use symbolic_expressions::parser::parse_str;
 
-use crate::eval::Eval;
+use crate::traits::{Eval, TypeCheck};
 
-pub mod eval;
 pub mod interpreter;
 pub mod interpreter_env;
+pub mod traits;
 pub mod type_check;
 
 fn main() -> Result<()> {
@@ -21,6 +21,7 @@ fn main() -> Result<()> {
     let mut env: InterpreterEnv = Default::default();
     println!("{}", &env);
     let program = Program(into_ast(&mut env.alloc, &sexp)?);
+    program.type_check(&env)?;
     let ret = program.eval(&mut env)?;
     println!("eval: {:?} -> {}", program, &ret);
     Ok(())

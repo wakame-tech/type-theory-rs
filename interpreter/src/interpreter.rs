@@ -1,4 +1,4 @@
-use crate::{eval::Eval, interpreter_env::InterpreterEnv};
+use crate::{interpreter_env::InterpreterEnv, traits::Eval};
 use anyhow::{anyhow, Ok, Result};
 use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 
