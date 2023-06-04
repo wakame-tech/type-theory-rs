@@ -1,59 +1,56 @@
 use crate::{eval::Eval, interpreter_env::InterpreterEnv};
-use anyhow::{Ok, Result};
-use ast::ast::{from_expr, Expr, FnApp, FnDef, Let, Program};
-use rand::{distributions::Alphanumeric, Rng};
-
-fn random_name() -> String {
-    rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(6)
-        .map(char::from)
-        .collect::<String>()
-}
+use anyhow::{anyhow, Ok, Result};
+use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 
 impl Eval for FnDef {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        let name = random_name();
-        env.functions.insert(name.clone(), self.clone());
-        Ok(Expr::Variable(name))
+        Ok(Expr::FnDef(self.clone()))
     }
 }
 
 impl Eval for Let {
     // (let a int 1)
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        let val = self.value.eval(env)?.literal()?;
-        env.new_var(self.name.clone(), val.type_id, val);
+        let expr = self.value.eval(env)?;
+        env.new_var(self.name.clone(), expr);
         Ok(Expr::Variable(self.name.clone()))
     }
 }
 
 impl Eval for FnApp {
+    /// (f g 1) => apply(f, apply(g, 1))
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        let param = self
-            .args
-            .iter()
-            .map(|arg| arg.eval(env).and_then(|arg| from_expr(&arg)))
-            .collect::<Result<Vec<_>>>()?;
-
-        let Some(fun) = (match &*self.fun {
-            Expr::Variable(fn_name) => env.functions.get(fn_name),
-            Expr::FnDef(fndef) => {
-                let name = fndef.eval(env)?.name()?;
-                env.functions.get(&name)
-            }
-            _ => return Err(anyhow::anyhow!("{} is not callable", self.fun)),
-        }) else {
-            return Err(anyhow::anyhow!("{} is not found", self.fun));
-        };
-        let mut env = env.clone();
-        for (param, val) in fun.params.iter().zip(param) {
-            env.new_var(param.name.clone(), param.typ_id.clone(), val);
-        }
-        let ret = fun.body.eval(&mut env);
-        println!("{} env\n {}", self.fun, env);
-        ret
+        self.1
+            .clone()
+            .into_iter()
+            .map(|app| Ok(app))
+            .rev()
+            .reduce(|f, v| apply(env, &f?, &v?))
+            .unwrap()
     }
+}
+
+fn apply(env: &mut InterpreterEnv, f: &Expr, param: &Expr) -> Result<Expr> {
+    let param = param.eval(env)?;
+    let fn_expr = match f.eval(env)? {
+        Expr::Variable(name) => env
+            .variables
+            .get(&name)
+            .cloned()
+            .ok_or(anyhow!("variable {} not found", name)),
+        def @ Expr::FnDef(_) => Ok(def),
+        _ => Err(anyhow!("")),
+    }?;
+
+    let Expr::FnDef(fn_def) = fn_expr else {
+        return Err(anyhow!("{} cannot apply", f))
+    };
+
+    let mut env = env.clone();
+    for (param, val) in fn_def.params.iter().zip(vec![param].iter()) {
+        env.new_var(param.name.clone(), val.clone());
+    }
+    fn_def.body.eval(&mut env)
 }
 
 impl Eval for Expr {
@@ -64,8 +61,8 @@ impl Eval for Expr {
             Expr::FnApp(fnapp) => fnapp.eval(env),
             Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
             Expr::Variable(var) => {
-                if let Some((_, v)) = env.variables.get(var) {
-                    Ok(Expr::Literal(v.clone()))
+                if let Some(lit @ Expr::Literal(_)) = env.variables.get(var) {
+                    Ok(lit.clone())
                 } else {
                     Err(anyhow::anyhow!("variable {} not found", var))
                 }

@@ -31,9 +31,9 @@ impl HMInferer {
                 }
                 Err(anyhow::anyhow!("type {} not found", name))
             }
-            Expr::FnApp(FnApp { fun, args, .. }) => {
-                let fn_type = self.analyse(fun, alloc, env, non_generic)?;
-                let arg_type = self.analyse(&args[0], alloc, env, non_generic)?;
+            Expr::FnApp(FnApp(_, apps)) => {
+                let fn_type = self.analyse(&apps[0], alloc, env, non_generic)?;
+                let arg_type = self.analyse(&apps[1], alloc, env, non_generic)?;
                 let ret = alloc.new_variable();
 
                 let new_fn_type = alloc.new_function(arg_type, ret.clone());

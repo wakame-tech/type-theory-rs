@@ -1,14 +1,13 @@
 use anyhow::Result;
-use ast::ast::{FnDef, Value};
+use ast::ast::{Expr, Value};
 use std::{collections::HashMap, fmt::Display};
-use structural_typesystem::{type_alloc::TypeAlloc, type_env::TypeEnv, types::Id};
+use structural_typesystem::{type_alloc::TypeAlloc, type_env::TypeEnv};
 
 #[derive(Debug, Clone)]
 pub struct InterpreterEnv {
     pub alloc: TypeAlloc,
     pub type_env: TypeEnv,
-    pub variables: HashMap<String, (Id, Value)>,
-    pub functions: HashMap<String, FnDef>,
+    pub variables: HashMap<String, Expr>,
 }
 
 impl Default for InterpreterEnv {
@@ -17,7 +16,6 @@ impl Default for InterpreterEnv {
             alloc: Default::default(),
             type_env: Default::default(),
             variables: HashMap::new(),
-            functions: HashMap::new(),
         };
         register_intrinsic_fns(&mut env).unwrap();
         env
@@ -67,9 +65,9 @@ fn register_intrinsic_fns(env: &mut InterpreterEnv) -> Result<()> {
 }
 
 impl InterpreterEnv {
-    pub fn new_var(&mut self, name: String, typ_id: Id, val: Value) {
-        self.type_env.register(&name, typ_id);
-        self.variables.insert(name, (typ_id, val));
+    pub fn new_var(&mut self, name: String, expr: Expr) {
+        self.type_env.register(&name, expr.type_id());
+        self.variables.insert(name, expr);
     }
 }
 
@@ -81,13 +79,8 @@ impl Display for InterpreterEnv {
             writeln!(f, "{} = #{}", k, v)?;
         }
         writeln!(f, "variables:")?;
-        for (name, (typ_id, v)) in &self.variables {
-            writeln!(f, "\t{}: #{} = {}\n", name, typ_id, v)?;
-        }
-
-        writeln!(f, "functions:")?;
-        for (name, fn_def) in &self.functions {
-            writeln!(f, "\t{}: {}", name, fn_def)?;
+        for (name, expr) in &self.variables {
+            writeln!(f, "\t{}: #{} = {}\n", name, expr.type_id(), expr)?;
         }
         Ok(())
     }

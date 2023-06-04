@@ -1,9 +1,7 @@
-use anyhow::{anyhow, Result};
-use std::{
-    fmt::{Debug, Display},
-    str::FromStr,
-};
+use anyhow::Result;
+use std::fmt::{Debug, Display};
 use structural_typesystem::{type_alloc::TypeAlloc, types::Id};
+use symbolic_expressions::Sexp;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parameter {
@@ -23,18 +21,14 @@ impl Display for Parameter {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FnApp {
-    pub fun: Box<Expr>,
-    pub args: Vec<Expr>,
-    pub type_id: Id,
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct FnApp(pub Id, pub Vec<Expr>);
 
 impl FnApp {
-    pub fn new(alloc: &mut TypeAlloc, fun: Box<Expr>, args: Vec<Expr>) -> Self {
+    pub fn new(alloc: &mut TypeAlloc, apps: Vec<Expr>) -> Self {
         // TODO
         let type_id = alloc.from("any").unwrap();
-        Self { fun, args, type_id }
+        Self(type_id, apps)
     }
 }
 
@@ -42,9 +36,8 @@ impl Display for FnApp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "({} {})",
-            self.fun,
-            self.args
+            "({})",
+            self.1
                 .iter()
                 .map(|arg| arg.to_string())
                 .collect::<Vec<_>>()
@@ -53,7 +46,7 @@ impl Display for FnApp {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
     pub params: Vec<Parameter>,
     pub body: Box<Expr>,
@@ -90,7 +83,7 @@ impl Display for FnDef {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Let {
     pub name: String,
     pub type_id: Id,
@@ -114,15 +107,15 @@ impl Display for Let {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Value {
-    pub raw: String,
+    pub raw: Sexp,
     pub type_id: Id,
 }
 
 impl Value {
-    pub fn as_value<T: FromStr>(&self) -> Result<T> {
-        self.raw.parse::<T>().map_err(|_| anyhow!("cannot parse"))
+    fn new(raw: Sexp, type_id: Id) -> Self {
+        Value { raw, type_id }
     }
 }
 
@@ -139,7 +132,7 @@ pub fn from_expr(expr: &Expr) -> Result<Value> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Value),
     Variable(String),
@@ -168,7 +161,7 @@ impl Expr {
             Expr::Literal(lit) => lit.type_id,
             Expr::Variable(v) => 0,
             Expr::Let(lt) => lt.type_id,
-            Expr::FnApp(app) => app.type_id,
+            Expr::FnApp(app) => app.0,
             Expr::FnDef(def) => def.type_id,
         }
     }
