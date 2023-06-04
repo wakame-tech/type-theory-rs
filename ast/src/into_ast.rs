@@ -153,7 +153,7 @@ mod tests {
         let type_id = alloc.from("int")?;
         should_be_ast(
             &mut alloc,
-            "(let x : int 1)",
+            "(let x (: int) 1)",
             &Expr::Let(Let::new(
                 "x".to_string(),
                 type_id,
@@ -195,7 +195,7 @@ mod tests {
             Box::new(Expr::Variable("x".to_string())),
         ));
 
-        should_be_ast(&mut alloc, "(lam (x : int) x)", &fn_def)
+        should_be_ast(&mut alloc, "(lam (x (: int)) x)", &fn_def)
     }
 
     #[test]
@@ -205,11 +205,11 @@ mod tests {
 
         let fn_def = Expr::FnDef(FnDef::new(
             &mut alloc,
-            vec![Parameter::new("x".to_string(), 7)],
+            vec![Parameter::new("x".to_string(), type_id)],
             Box::new(Expr::Variable("x".to_string())),
         ));
 
-        should_be_ast(&mut alloc, "(lam (x : *) x)", &fn_def)
+        should_be_ast(&mut alloc, "(lam (x (: int)) x)", &fn_def)
     }
 
     #[test]

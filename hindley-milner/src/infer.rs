@@ -203,9 +203,10 @@ mod test {
 
     use crate::infer::HMInferer;
     use anyhow::Result;
-    use ast::into_ast::{into_ast, parse_sexp};
-    use log::{debug, LevelFilter};
+    use ast::into_ast::into_ast;
+    use log::LevelFilter;
     use structural_typesystem::type_env::setup_type_env;
+    use symbolic_expressions::parser::parse_str;
 
     static INIT: Once = Once::new();
 
@@ -223,7 +224,7 @@ mod test {
         setup();
         let (mut env, mut alloc) = setup_type_env()?;
         let inferer = HMInferer;
-        let exp = into_ast(&mut alloc, &parse_sexp(expr)?)?;
+        let exp = into_ast(&mut alloc, &parse_str(expr)?)?;
         let infer_type_id = inferer.analyse(&exp, &mut alloc, &mut env, &HashSet::new())?;
         let type_id = alloc.from(type_expr)?;
         assert_eq!(infer_type_id, type_id);

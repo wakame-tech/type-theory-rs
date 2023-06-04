@@ -86,6 +86,7 @@ dependencies = [
  "env_logger",
  "log",
  "structural-typesystem",
+ "symbolic_expressions",
 ]
 
 [[package]]

@@ -187,4 +187,4 @@ impl Display for Expr {
 }
 
 #[derive(Debug)]
-pub struct Program(pub Vec<Expr>);
+pub struct Program(pub Expr);
