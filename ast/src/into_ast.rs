@@ -1,4 +1,4 @@
-use crate::ast::{Expr, FnDef, Let, Parameter, Value};
+use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
 use anyhow::Result;
 use structural_typesystem::{type_alloc::TypeAlloc, types::Id};
 use symbolic_expressions::{parser::parse_str, Sexp};
@@ -22,68 +22,74 @@ pub fn parse_type(alloc: &mut TypeAlloc, type_sexp: &Sexp) -> Result<Id> {
 }
 
 /// parse (x (: int))
-pub fn parse_parameter(alloc: &mut TypeAlloc, sexp: &Sexp) -> Result<Parameter> {
+pub fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     let Ok(list) = sexp.list() else {
         return Err(anyhow::anyhow!("parameter must be list"));
     };
     Ok(Parameter::new(
         list[0].string()?.to_string(),
-        parse_type(alloc, &list[1])?,
+        list[1].clone(),
     ))
 }
 
 /// (lam (x (: int)) x)
-pub fn parse_lambda(alloc: &mut TypeAlloc, list: &[Sexp]) -> Result<Expr> {
-    let param = parse_parameter(alloc, &list[1])?;
+pub fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
+    let param = parse_parameter(&list[1])?;
     let body = list[2].clone();
-    let body_ast = Box::new(into_ast(alloc, &body)?);
-    Ok(Expr::FnDef(FnDef::new(alloc, vec![param], body_ast)))
+    let body_ast = Box::new(into_ast(&body)?);
+    Ok(Expr::FnDef(FnDef::new(param, body_ast)))
 }
 
 /// (let a (: int) 1) or (let a 1)
-pub fn parse_let(alloc: &mut TypeAlloc, list: &[Sexp]) -> Result<Expr> {
+pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
     let let_node = match list.len() {
         3 => {
             let (name, val) = (list[1].string()?, &list[2]);
             println!("let {} = {}", &name, val);
-            let val = into_ast(alloc, val)?;
-            Let::new(name.to_string(), val.type_id(), Box::new(val))
+            let val = into_ast(val)?;
+            Let::new(name.to_string(), None, Box::new(val))
         }
         4 => {
-            let (name, type_sexp, val) = (list[1].string()?, &list[2], &list[3]);
-            let typ = parse_type(alloc, type_sexp)?;
-            let val = into_ast(alloc, val)?;
-            Let::new(name.to_string(), typ, Box::new(val))
+            let (name, typ, val) = (list[1].string()?, &list[2], &list[3]);
+            let val = into_ast(val)?;
+            Let::new(name.to_string(), Some(typ.clone()), Box::new(val))
         }
         _ => panic!("invalid let"),
     };
     Ok(Expr::Let(let_node))
 }
 
-/// (f 1)
-pub fn parse_apply(alloc: &mut TypeAlloc, list: &[Sexp]) -> Result<Expr> {
-    let apps = list
-        .iter()
-        .map(|s| into_ast(alloc, s))
-        .collect::<Result<Vec<_>>>()?;
-    Ok(Expr::FnApp(crate::ast::FnApp::new(alloc, apps)))
+pub fn reduce<T, F>(a: Result<T>, b: Result<T>, f: F) -> Result<T>
+where
+    F: FnOnce(T, T) -> T,
+{
+    match (a, b) {
+        (Ok(l), Ok(r)) => Ok(f(l, r)),
+        (Ok(_), Err(e)) | (Err(e), Ok(_)) => Err(e),
+        (Err(e1), Err(e2)) => Err(anyhow::anyhow!("{}, {}", e1, e2)),
+    }
 }
 
-pub fn into_ast(alloc: &mut TypeAlloc, sexp: &Sexp) -> Result<Expr> {
+/// (f g h) -> ((f g) h)
+pub fn parse_apply(f: &Sexp, v: &Sexp) -> Result<Expr> {
+    let (f, v) = (into_ast(f)?, into_ast(v)?);
+    Ok(Expr::FnApp(FnApp::new(f, v)))
+}
+
+pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
     match sexp {
-        Sexp::List(list) => match list[0].string()?.as_str() {
-            "lam" => parse_lambda(alloc, list),
-            "let" => parse_let(alloc, list),
-            _ => parse_apply(alloc, list),
+        Sexp::List(list) => match list[0] {
+            Sexp::String(ref lam) if lam == "lam" => parse_lambda(list),
+            Sexp::String(ref lt) if lt == "let" => parse_let(list),
+            _ if list.len() == 2 => parse_apply(&list[0], &list[1]),
+            _ => Err(anyhow::anyhow!("illegal operands")),
         },
         Sexp::String(lit) => match lit.as_str() {
             _ if is_number(lit) => Ok(Expr::Literal(Value {
                 raw: parse_str(lit)?,
-                type_id: alloc.from("int")?,
             })),
             _ if is_bool(lit) => Ok(Expr::Literal(Value {
                 raw: parse_str(lit)?,
-                type_id: alloc.from("bool")?,
             })),
             _ => Ok(Expr::Variable(lit.to_string())),
         },
@@ -96,55 +102,46 @@ mod tests {
     use super::into_ast;
     use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
     use anyhow::Result;
-    use structural_typesystem::type_alloc::TypeAlloc;
-    use symbolic_expressions::parser::parse_str;
+    use symbolic_expressions::{parser::parse_str, Sexp};
 
-    fn should_be_ast(alloc: &mut TypeAlloc, sexp: &str, expected: &Expr) -> Result<()> {
+    fn make_value(value: &str) -> Result<Value> {
+        Ok(Value {
+            raw: parse_str(value)?,
+        })
+    }
+
+    fn should_be_ast(sexp: &str, expected: &Expr) -> Result<()> {
         let sexp = parse_str(sexp)?;
-        let ast = into_ast(alloc, &sexp).unwrap();
+        let ast = into_ast(&sexp).unwrap();
         assert_eq!(&ast, expected);
         Ok(())
     }
 
     #[test]
     fn int_literal() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let value = Value {
-            raw: parse_str("1")?,
-            type_id: alloc.from("int")?,
-        };
-        should_be_ast(&mut alloc, "1", &Expr::Literal(value))
+        let v = make_value("1")?;
+        should_be_ast("1", &Expr::Literal(v))
     }
 
     #[test]
     fn bool_literal() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let value = Value {
-            raw: parse_str("true")?,
-            type_id: alloc.from("bool")?,
-        };
-        should_be_ast(&mut alloc, "true", &Expr::Literal(value))
+        let value = make_value("true")?;
+        should_be_ast("true", &Expr::Literal(value))
     }
 
     #[test]
     fn var_literal() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        should_be_ast(&mut alloc, "x", &Expr::Variable("x".to_string()))
+        should_be_ast("x", &Expr::Variable("x".to_string()))
     }
 
     #[test]
     fn let_expr() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let value = Value {
-            raw: parse_str("1")?,
-            type_id: alloc.from("int")?,
-        };
+        let value = make_value("1")?;
         should_be_ast(
-            &mut alloc,
             "(let x (: int) 1)",
             &Expr::Let(Let::new(
                 "x".to_string(),
-                value.type_id,
+                Some(Sexp::String("int".to_string())),
                 Box::new(Expr::Literal(value)),
             )),
         )
@@ -152,89 +149,56 @@ mod tests {
 
     #[test]
     fn let_wo_anno() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
-
+        let value = make_value("1")?;
         should_be_ast(
-            &mut alloc,
             "(let x 1)",
             &Expr::Let(Let::new(
                 "x".to_string(),
-                type_id,
-                Box::new(Expr::Literal(Value {
-                    raw: parse_str("1")?,
-                    type_id,
-                })),
+                Some(Sexp::String("int".to_string())),
+                Box::new(Expr::Literal(value)),
             )),
         )
     }
 
     #[test]
     fn lam() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
-
         let fn_def = Expr::FnDef(FnDef::new(
-            &mut alloc,
-            vec![Parameter::new("x".to_string(), type_id)],
+            Parameter::new("x".to_string(), Sexp::String("int".to_string())),
             Box::new(Expr::Variable("x".to_string())),
         ));
-
-        should_be_ast(&mut alloc, "(lam (x (: int)) x)", &fn_def)
+        should_be_ast("(lam (x (: int)) x)", &fn_def)
     }
 
     #[test]
     fn lam_wo_anno() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
-
         let fn_def = Expr::FnDef(FnDef::new(
-            &mut alloc,
-            vec![Parameter::new("x".to_string(), type_id)],
+            Parameter::new("x".to_string(), Sexp::String("int".to_string())),
             Box::new(Expr::Variable("x".to_string())),
         ));
-
-        should_be_ast(&mut alloc, "(lam (x (: int)) x)", &fn_def)
+        should_be_ast("(lam (x (: int)) x)", &fn_def)
     }
 
     #[test]
     fn app() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let value = make_value("1")?;
         let fn_app = Expr::FnApp(FnApp::new(
-            &mut alloc,
-            vec![
-                Expr::Variable("succ".to_string()),
-                Expr::Literal(Value {
-                    raw: parse_str("1")?,
-                    type_id,
-                }),
-            ],
+            Expr::Variable("succ".to_string()),
+            Expr::Literal(value),
         ));
-
-        should_be_ast(&mut alloc, "(succ 1)", &fn_app)
+        should_be_ast("(succ 1)", &fn_app)
     }
 
     #[test]
     fn op_redirects_app() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let value1 = make_value("1")?;
+        let value2 = make_value("2")?;
 
-        let fn_app = Expr::FnApp(crate::ast::FnApp::new(
-            &mut alloc,
-            vec![
-                Expr::Variable("+".to_string()),
-                Expr::Literal(Value {
-                    raw: parse_str("1")?,
-                    type_id,
-                }),
-                Expr::Literal(Value {
-                    raw: parse_str("2")?,
-                    type_id,
-                }),
-            ],
+        // (+ 1 2) -> ((+ 1) 2)
+        let plus1 = Expr::FnApp(FnApp::new(
+            Expr::Variable("+".to_string()),
+            Expr::Literal(value1),
         ));
-
-        should_be_ast(&mut alloc, "(+ 1 2)", &fn_app)
+        let plus1_2 = Expr::FnApp(FnApp::new(plus1, Expr::Literal(value2)));
+        should_be_ast("((+ 1) 2)", &plus1_2)
     }
 }

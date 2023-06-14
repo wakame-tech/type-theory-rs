@@ -1,8 +1,7 @@
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let};
+use ast::ast::{Expr};
 use std::collections::{HashMap, HashSet};
 use structural_typesystem::{
-    type_alloc::TypeAlloc,
     type_env::TypeEnv,
     types::{Id, Type},
 };
@@ -11,79 +10,73 @@ use structural_typesystem::{
 struct HMInferer;
 
 impl HMInferer {
-    pub fn analyse(
-        &self,
-        expr: &Expr,
-        alloc: &mut TypeAlloc,
-        env: &mut TypeEnv,
-        non_generic: &HashSet<Id>,
-    ) -> Result<Id> {
+    pub fn analyse(&self, expr: &Expr, _env: &mut TypeEnv, _non_generic: &HashSet<Id>) -> Result<Id> {
         println!("expr = {:?}", expr);
+        todo!();
 
-        match &expr {
-            Expr::Literal(value) => Ok(value.type_id),
-            Expr::Variable(name) => {
-                if let Some(value) = env.get_id(name) {
-                    let ng = non_generic.iter().cloned().collect::<Vec<_>>();
-                    let ret = self.fresh(alloc, env, value, &ng);
-                    return Ok(ret);
-                }
-                Err(anyhow::anyhow!("type {} not found", name))
-            }
-            Expr::FnApp(FnApp(_, apps)) => {
-                let fn_type = self.analyse(&apps[0], alloc, env, non_generic)?;
-                let arg_type = self.analyse(&apps[1], alloc, env, non_generic)?;
-                let ret = alloc.new_variable();
+        // match &expr {
+        //     Expr::Literal(value) => Ok(value.type_id),
+        //     Expr::Variable(name) => {
+        //         if let Some(value) = env.get_id(name) {
+        //             let ng = non_generic.iter().cloned().collect::<Vec<_>>();
+        //             let ret = self.fresh(alloc, env, value, &ng);
+        //             return Ok(ret);
+        //         }
+        //         Err(anyhow::anyhow!("type {} not found", name))
+        //     }
+        //     Expr::FnApp(FnApp(_, f, v)) => {
+        //         let fn_type = self.analyse(f, alloc, env, non_generic)?;
+        //         let arg_type = self.analyse(v, alloc, env, non_generic)?;
+        //         let ret = alloc.new_variable();
 
-                let new_fn_type = alloc.new_function(arg_type, ret.clone());
-                self.unify(&mut alloc.alloc, new_fn_type, fn_type)?;
-                Ok(ret)
-            }
-            Expr::FnDef(FnDef { params, body, .. }) => {
-                let arg = params[0].clone();
-                let mut new_env = env.clone();
-                new_env.add(&arg.name, arg.typ_id);
+        //         let new_fn_type = alloc.new_function(arg_type, ret);
+        //         self.unify(&mut alloc.alloc, new_fn_type, fn_type)?;
+        //         Ok(ret)
+        //     }
+        //     Expr::FnDef(FnDef { param, body, .. }) => {
+        //         let arg = param.clone();
+        //         let mut new_env = env.clone();
+        //         new_env.add(&arg.name, arg.typ_id);
 
-                let mut new_non_generic = non_generic.clone();
-                new_non_generic.insert(arg.typ_id);
-                let ret = self.analyse(body, alloc, &mut new_env, &new_non_generic)?;
-                Ok(alloc.new_function(arg.typ_id, ret))
-            }
-            Expr::Let(Let {
-                name,
-                type_id,
-                value,
-            }) => {
-                Ok(*type_id)
-                // if let Some(id) = type_id {
-                //     return Ok(*id);
-                // } else {
-                //     let infer_id = self.analyse(value, alloc, env, non_generic)?;
+        //         let mut new_non_generic = non_generic.clone();
+        //         new_non_generic.insert(arg.typ_id);
+        //         let ret = self.analyse(body, alloc, &mut new_env, &new_non_generic)?;
+        //         Ok(alloc.new_function(arg.typ_id, ret))
+        //     }
+        //     Expr::Let(Let {
+        //         name: _,
+        //         type_id,
+        //         value: _,
+        //     }) => {
+        //         Ok(*type_id)
+        //         // if let Some(id) = type_id {
+        //         //     return Ok(*id);
+        //         // } else {
+        //         //     let infer_id = self.analyse(value, alloc, env, non_generic)?;
 
-                //     // let mut new_env = env.clone();
-                //     // new_env.id_map.insert(name.clone(), infer_id);
-                //     // return Ok(infer_id);
+        //         //     // let mut new_env = env.clone();
+        //         //     // new_env.id_map.insert(name.clone(), infer_id);
+        //         //     // return Ok(infer_id);
 
-                //     env.register(name.as_str(), infer_id);
-                //     return Ok(infer_id);
-                // }
-            }
-        }
+        //         //     env.register(name.as_str(), infer_id);
+        //         //     return Ok(infer_id);
+        //         // }
+        //     }
+        // }
     }
 
     fn fresh_rec(
         &self,
-        alloc: &mut TypeAlloc,
         env: &mut TypeEnv,
         tp: Id,
         mappings: &mut HashMap<Id, Id>,
         non_generic: &[Id],
     ) -> Id {
-        let p = self.prune(&mut alloc.alloc, tp);
-        match alloc.alloc.get(p).unwrap().clone() {
+        let p = self.prune(&mut env.alloc.alloc, tp);
+        match env.alloc.alloc.get(p).unwrap().clone() {
             Type::Variable { .. } => {
-                if self.is_generic(&mut alloc.alloc, p, non_generic) {
-                    mappings.entry(p).or_insert(alloc.new_variable()).clone()
+                if self.is_generic(&mut env.alloc.alloc, p, non_generic) {
+                    *mappings.entry(p).or_insert(env.alloc.new_variable())
                 } else {
                     p
                 }
@@ -93,10 +86,10 @@ impl HMInferer {
             } => {
                 let ids = types
                     .iter()
-                    .map(|t| self.fresh_rec(alloc, env, *t, mappings, non_generic))
+                    .map(|t| self.fresh_rec(env, *t, mappings, non_generic))
                     .collect::<Vec<_>>();
 
-                alloc.new_operator(name, &ids)
+                env.alloc.new_operator(name, &ids)
             }
             Type::Record { .. } => {
                 todo!()
@@ -104,10 +97,10 @@ impl HMInferer {
         }
     }
 
-    fn fresh(&self, alloc: &mut TypeAlloc, env: &mut TypeEnv, t: Id, non_generic: &[Id]) -> Id {
+    fn fresh(&self, env: &mut TypeEnv, t: Id, non_generic: &[Id]) -> Id {
         println!("fresh {} {:?}", t, non_generic);
         let mut mappings: HashMap<Id, Id> = HashMap::new();
-        self.fresh_rec(alloc, env, t, &mut mappings, non_generic)
+        self.fresh_rec(env, t, &mut mappings, non_generic)
     }
 
     /// 単一化: 2つの型が一致するようななるべく小さな型代入を見つける
@@ -142,17 +135,16 @@ impl HMInferer {
                 a_types
                     .iter()
                     .zip(b_types.iter())
-                    .map(|(aa, bb)| self.unify(alloc, *aa, *bb))
-                    .collect::<Result<_>>()
+                    .try_for_each(|(aa, bb)| self.unify(alloc, *aa, *bb))
             }
             (
                 Type::Record {
-                    id: a_id,
-                    types: a_types,
+                    id: _a_id,
+                    types: _a_types,
                 },
                 Type::Record {
-                    id: b_id,
-                    types: b_types,
+                    id: _b_id,
+                    types: _b_types,
                 },
             ) => {
                 todo!()
@@ -188,23 +180,22 @@ impl HMInferer {
             return true;
         }
         if let Type::Operator { types, .. } = alloc.get(prune_t).unwrap().clone() {
-            return self.occurs_in(alloc, v, &types);
+            self.occurs_in(alloc, v, &types)
         } else {
-            return false;
+            false
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::io::Write;
-    use std::{collections::HashSet, sync::Once};
-
     use crate::infer::HMInferer;
     use anyhow::Result;
     use ast::into_ast::into_ast;
     use log::LevelFilter;
-    use structural_typesystem::type_env::setup_type_env;
+    use std::io::Write;
+    use std::{collections::HashSet, sync::Once};
+    use structural_typesystem::type_env::TypeEnv;
     use symbolic_expressions::parser::parse_str;
 
     static INIT: Once = Once::new();
@@ -221,11 +212,11 @@ mod test {
 
     fn should_infer(expr: &str, type_expr: &str) -> Result<()> {
         setup();
-        let (mut env, mut alloc) = setup_type_env()?;
+        let mut type_env = TypeEnv::default();
         let inferer = HMInferer;
-        let exp = into_ast(&mut alloc, &parse_str(expr)?)?;
-        let infer_type_id = inferer.analyse(&exp, &mut alloc, &mut env, &HashSet::new())?;
-        let type_id = alloc.from(type_expr)?;
+        let exp = into_ast(&parse_str(expr)?)?;
+        let infer_type_id = inferer.analyse(&exp, &mut type_env, &HashSet::new())?;
+        let type_id = type_env.get(type_expr)?;
         assert_eq!(infer_type_id, type_id);
         Ok(())
     }

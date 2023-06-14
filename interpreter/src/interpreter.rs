@@ -3,7 +3,7 @@ use anyhow::{anyhow, Ok, Result};
 use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 
 impl Eval for FnDef {
-    fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
+    fn eval(&self, _env: &mut InterpreterEnv) -> Result<Expr> {
         Ok(Expr::FnDef(self.clone()))
     }
 }
@@ -12,45 +12,41 @@ impl Eval for Let {
     // (let a int 1)
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         let expr = self.value.eval(env)?;
-        env.new_var(self.name.clone(), expr);
+        let typ = if let Some(typ) = &self.typ {
+            env.type_env.alloc.from_sexp(typ)?
+        } else {
+            todo!();
+        };
+        env.new_var(&self.name, expr, typ);
         Ok(Expr::Variable(self.name.clone()))
     }
 }
 
 impl Eval for FnApp {
-    /// (f g 1) => apply(f, apply(g, 1))
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        self.1
-            .clone()
-            .into_iter()
-            .map(|app| Ok(app))
-            .rev()
-            .reduce(|f, v| apply(env, &f?, &v?))
-            .unwrap()
+        let param = self.1.eval(env)?;
+        let f = match self.0.eval(env)? {
+            // builtin function
+            Expr::Variable(plus) if plus == "+" => {
+                todo!()
+            }
+            Expr::Variable(name) => {
+                if let Expr::FnDef(fn_def) = dbg!(env.get_variable(&name)?) {
+                    Ok(fn_def)
+                } else {
+                    Err(anyhow!("{} is cannot apply", name))
+                }
+            }
+            Expr::FnDef(def) => Ok(def),
+            expr => Err(anyhow!("{} cannot apply", expr)),
+        }?;
+        let current_context = env.current_context.clone();
+        let context = env.switch_context(f.to_string().as_str());
+        context.variables.insert(f.param.name, param);
+        let ret = f.body.eval(env);
+        env.switch_context(&current_context);
+        ret
     }
-}
-
-fn apply(env: &mut InterpreterEnv, f: &Expr, param: &Expr) -> Result<Expr> {
-    let param = param.eval(env)?;
-    let fn_expr = match f.eval(env)? {
-        Expr::Variable(name) => env
-            .variables
-            .get(&name)
-            .cloned()
-            .ok_or(anyhow!("variable {} not found", name)),
-        def @ Expr::FnDef(_) => Ok(def),
-        _ => Err(anyhow!("")),
-    }?;
-
-    let Expr::FnDef(fn_def) = fn_expr else {
-        return Err(anyhow!("{} cannot apply", f))
-    };
-
-    let mut env = env.clone();
-    for (param, val) in fn_def.params.iter().zip(vec![param].iter()) {
-        env.new_var(param.name.clone(), val.clone());
-    }
-    fn_def.body.eval(&mut env)
 }
 
 impl Eval for Expr {
@@ -60,13 +56,7 @@ impl Eval for Expr {
             Expr::Let(r#let) => r#let.eval(env),
             Expr::FnApp(fnapp) => fnapp.eval(env),
             Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
-            Expr::Variable(var) => {
-                if let Some(lit @ Expr::Literal(_)) = env.variables.get(var) {
-                    Ok(lit.clone())
-                } else {
-                    Err(anyhow::anyhow!("variable {} not found", var))
-                }
-            }
+            Expr::Variable(var) => env.get_variable(var),
         }
     }
 }

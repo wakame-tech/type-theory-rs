@@ -2,6 +2,6 @@
 members = [
   "ast",
   "structural-typesystem",
-  "hindley-milner",
+  # "hindley-milner",
   "interpreter",
 ]

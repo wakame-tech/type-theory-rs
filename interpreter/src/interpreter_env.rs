@@ -1,127 +1,83 @@
-use anyhow::Result;
-use ast::ast::{Expr, FnDef, Parameter, Value};
-use std::{
-    collections::HashMap,
-    fmt::{self, Display, Write},
-};
-use structural_typesystem::{
-    builtin_types::register_builtin_types, type_alloc::TypeAlloc, type_env::TypeEnv,
-};
-use symbolic_expressions::Sexp;
+use crate::builtin::main_context;
+use anyhow::{anyhow, Result};
+use ast::ast::Expr;
+use std::{collections::HashMap, fmt::Display};
+use structural_typesystem::{type_env::TypeEnv, types::Id};
 
 #[derive(Debug, Clone)]
-pub struct InterpreterEnv {
-    pub alloc: TypeAlloc,
-    pub type_env: TypeEnv,
+pub struct Context {
     pub variables: HashMap<String, Expr>,
 }
 
-impl InterpreterEnv {
-    pub fn new() -> Result<Self> {
-        let mut alloc = TypeAlloc::new();
-        let mut type_env = TypeEnv::new();
-        register_builtin_types(&mut type_env, &mut alloc)?;
-        let mut env = Self {
-            alloc,
-            type_env,
+impl Context {
+    pub fn new() -> Self {
+        Self {
             variables: HashMap::new(),
-        };
-        register_builtin_vars(&mut env)?;
-        Ok(env)
+        }
     }
 }
 
-fn register_builtin_vars(env: &mut InterpreterEnv) -> Result<()> {
-    let int = env.alloc.from("int")?;
-    let int_int = env.alloc.new_function(int, int);
-    let int_int_int = env.alloc.new_function(int_int, int);
-    env.type_env.add("+", int_int_int);
-    env.type_env.add("a", int);
-    env.type_env.add("b", int);
+impl Display for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (_name, expr) in &self.variables {
+            writeln!(f, "- {}", expr)?;
+        }
+        Ok(())
+    }
+}
 
-    let add_fn = FnDef::new(
-        &mut env.alloc,
-        vec![
-            Parameter::new("a".to_string(), int),
-            Parameter::new("b".to_string(), int),
-        ],
-        Box::new(Expr::Literal(Value {
-            raw: Sexp::Empty,
-            type_id: int,
-        })),
-    );
-    env.new_var("+".to_string(), Expr::FnDef(add_fn));
+#[derive(Debug, Clone)]
+pub struct InterpreterEnv {
+    pub current_context: String,
+    // TODO: type_env per each context
+    pub type_env: TypeEnv,
+    pub contexts: HashMap<String, Context>,
+}
 
-    let a = env.alloc.new_variable();
-    let a_a = env.alloc.new_function(a, a);
-    env.type_env.add("v", a);
-    env.type_env.add("id", a_a);
-
-    let id_fn = FnDef::new(
-        &mut env.alloc,
-        vec![Parameter::new("v".to_string(), a)],
-        Box::new(Expr::Literal(Value {
-            raw: Sexp::Empty,
-            type_id: int,
-        })),
-    );
-    env.new_var("id".to_string(), Expr::FnDef(id_fn));
-
-    Ok(())
+impl Default for InterpreterEnv {
+    fn default() -> Self {
+        let mut global_type_env = TypeEnv::default();
+        let main_context = main_context(&mut global_type_env).unwrap();
+        Self {
+            current_context: "main".to_string(),
+            type_env: global_type_env,
+            contexts: HashMap::from_iter(vec![("main".to_string(), main_context)]),
+        }
+    }
 }
 
 impl InterpreterEnv {
-    pub fn new_var(&mut self, name: String, expr: Expr) {
-        self.type_env.add(&name, expr.type_id());
-        self.variables.insert(name, expr);
+    pub fn switch_context(&mut self, name: &str) -> &mut Context {
+        self.current_context = name.to_string();
+        self.contexts
+            .entry(name.to_string())
+            .or_insert_with(Context::new)
     }
 
-    pub fn debug(&self, expr: &Expr) -> Result<String> {
-        match expr {
-            Expr::Literal(lit) => {
-                let typ = self.alloc.as_string(lit.type_id, &mut Default::default())?;
-                Ok(format!("{}: {}", lit.raw, typ))
-            }
-            Expr::Variable(var) => {
-                let var = self
-                    .variables
-                    .get(var)
-                    .ok_or(anyhow::anyhow!("not found"))?;
-                let typ = self
-                    .alloc
-                    .as_string(var.type_id(), &mut Default::default())?;
-                Ok(format!("{}: {}", var, typ))
-            }
-            Expr::Let(_) => todo!(),
-            Expr::FnApp(app) => {
-                let typs = app
-                    .1
-                    .iter()
-                    .map(|expr| {
-                        self.alloc
-                            .as_string(expr.type_id(), &mut Default::default())
-                            .map(|ty| format!("{}: {}", self.debug(expr).unwrap(), ty))
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(format!("({})", typs.join(" ")))
-            }
-            Expr::FnDef(def) => {
-                let typ =
-            },
+    pub fn new_var(&mut self, name: &str, expr: Expr, typ: Id) {
+        self.type_env.add(name, typ);
+        let context = self.switch_context(name);
+        context.variables.insert(name.to_string(), expr);
+    }
+
+    pub fn get_variable(&self, name: &str) -> Result<Expr> {
+        let ctx = self
+            .contexts
+            .get(&self.current_context)
+            .ok_or(anyhow!("{} not found", name))?;
+        if let Some(e @ Expr::Variable(_)) = ctx.variables.get(name) {
+            Ok(e.clone())
+        } else {
+            Err(anyhow!("{} not found (env={})", name, self.current_context))
         }
     }
 }
 
 impl Display for InterpreterEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "[env]")?;
-        writeln!(f, "type_env:")?;
-        for (k, v) in &self.type_env.id_map {
-            writeln!(f, "{} = #{}", k, v)?;
-        }
-        writeln!(f, "variables:")?;
-        for (name, expr) in &self.variables {
-            writeln!(f, "{}", self.debug(expr).unwrap())?;
+        writeln!(f, "type_env: {}", self.type_env)?;
+        for (name, context) in self.contexts.iter() {
+            writeln!(f, "{} {}", name, context)?;
         }
         Ok(())
     }

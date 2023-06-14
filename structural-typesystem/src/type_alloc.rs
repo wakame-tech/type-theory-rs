@@ -1,12 +1,10 @@
-use std::collections::BTreeMap;
-
 use crate::{
     issuer::Issuer,
-    type_env::TypeEnv,
     types::{Id, Type, TypeExpr},
 };
 use anyhow::{anyhow, Result};
-use symbolic_expressions::{parser::parse_str, Sexp};
+use std::collections::BTreeMap;
+use symbolic_expressions::Sexp;
 
 /// [TypeAlloc] is globally unique.
 #[derive(Debug, Clone)]
@@ -28,7 +26,6 @@ impl TypeAlloc {
 
     /// create a new operator type
     pub fn new_operator(&mut self, name: &str, types: &Vec<Id>) -> Id {
-        println!("new_operator: {} = {:?}", name, types);
         let id = self.alloc.len();
         self.alloc.push(Type::Operator {
             id,
@@ -38,11 +35,6 @@ impl TypeAlloc {
         id
     }
 
-    /// create a new function type
-    ///
-    /// ```
-    /// new_function(&mut alloc, 0, 0);
-    /// ```
     pub fn new_function(&mut self, arg: Id, ret: Id) -> Id {
         let id = self.alloc.len();
         let typ = Type::Operator {
@@ -55,7 +47,6 @@ impl TypeAlloc {
         id
     }
 
-    /// create a new primitive type
     pub fn new_primitive(&mut self, name: &str) -> Id {
         let id = self.alloc.len();
         let typ = Type::Operator {
@@ -77,7 +68,7 @@ impl TypeAlloc {
     pub fn from_id(&self, id: Id) -> Result<Type> {
         self.alloc
             .get(id)
-            .map(|t| t.clone())
+            .cloned()
             .ok_or(anyhow!("type_id {} not found", id))
     }
 
@@ -108,12 +99,20 @@ impl TypeAlloc {
                     ))
                 }
             }
-            Type::Record { .. } => todo!(),
+            Type::Record { types, .. } => Ok(Sexp::List(
+                vec![
+                    vec![Sexp::String("record".to_string())],
+                    types
+                        .iter()
+                        .map(|(k, v)| {
+                            self.as_sexp(*v, &mut Default::default())
+                                .map(|t| Sexp::List(vec![Sexp::String(k.to_string()), t]))
+                        })
+                        .collect::<Result<Vec<_>>>()?,
+                ]
+                .concat(),
+            )),
         }
-    }
-
-    pub fn as_string(&self, type_id: Id, issuer: &mut Issuer) -> Result<String> {
-        self.as_sexp(type_id, issuer).map(|sexp| sexp.to_string())
     }
 
     /// type parser
@@ -125,28 +124,32 @@ impl TypeAlloc {
             .ok_or(anyhow!("type {} not found", type_sexp))?;
         Ok(typ.id())
     }
-
-    pub fn from(&self, expr: &str) -> Result<Id> {
-        let type_sexp = parse_str(expr)?;
-        self.from_sexp(&type_sexp)
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::TypeAlloc;
+    use crate::type_env::TypeEnv;
     use anyhow::Result;
+    use symbolic_expressions::parser::parse_str;
 
     #[test]
     fn parse_fn_type() -> Result<()> {
-        let mut alloc = TypeAlloc::new();
-        let int_type_id = alloc.from("int")?;
-        alloc.new_function(int_type_id, int_type_id);
-
-        let ty = alloc.from("(-> int int)")?;
+        let mut type_env = TypeEnv::default();
+        let int_int = type_env.get("(-> int int)")?;
         assert_eq!(
-            alloc.as_string(ty, &mut Default::default())?,
-            "(-> int int)"
+            type_env.alloc.as_sexp(int_int, &mut Default::default())?,
+            parse_str("(-> int int)")?,
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_record_type() -> Result<()> {
+        let mut type_env = TypeEnv::default();
+        let rec = type_env.get("(record (a int))")?;
+        assert_eq!(
+            type_env.alloc.as_sexp(rec, &mut Default::default())?,
+            parse_str("(record (a int))")?,
         );
         Ok(())
     }
