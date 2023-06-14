@@ -12,13 +12,14 @@ pub mod traits;
 pub mod type_check;
 
 fn main() -> Result<()> {
-    let sexp = parse_str("(let a (: int) 1)")?;
+    // let sexp = parse_str("(let a (: int) 1)")?;
+    let sexp = parse_str("(id 1)")?;
     // "(+ 1 2)"
     // "(let a int 1)"
     // "(let x (app zero? 3))"
     // "(let a (app zero? 1))"
     // "(app (lam ((: x int)) x) 1)"
-    let mut env: InterpreterEnv = Default::default();
+    let mut env = InterpreterEnv::new()?;
     println!("{}", &env);
     let program = Program(into_ast(&mut env.alloc, &sexp)?);
     program.type_check(&env)?;

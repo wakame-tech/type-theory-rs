@@ -96,7 +96,7 @@ mod tests {
     use super::into_ast;
     use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
     use anyhow::Result;
-    use structural_typesystem::{type_alloc::TypeAlloc, type_env::setup_type_env};
+    use structural_typesystem::type_alloc::TypeAlloc;
     use symbolic_expressions::parser::parse_str;
 
     fn should_be_ast(alloc: &mut TypeAlloc, sexp: &str, expected: &Expr) -> Result<()> {

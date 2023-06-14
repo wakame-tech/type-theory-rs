@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     issuer::Issuer,
     type_env::TypeEnv,
@@ -61,6 +63,13 @@ impl TypeAlloc {
             name: name.to_string(),
             types: vec![],
         };
+        self.alloc.push(typ);
+        id
+    }
+
+    pub fn new_record(&mut self, record: BTreeMap<String, Id>) -> Id {
+        let id = self.alloc.len();
+        let typ = Type::Record { id, types: record };
         self.alloc.push(typ);
         id
     }

@@ -27,15 +27,16 @@ impl TypeEnv {
         self.index_map.insert(type_id, i);
     }
 
-    /// register subtype of [b]
+    /// register `a` as subtype of `b`
     pub fn subtype(&mut self, a: Id, b: Id) {
-        let (ai, bi) = (self.index_map[&b], self.index_map[&a]);
-        self.tree.add_edge(ai, bi, ());
+        let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
+        self.tree.add_edge(bi, ai, ());
     }
 
+    /// returns true is a is subtype of b
     pub fn is_subtype(&self, a: Id, b: Id) -> bool {
-        let (ai, bi) = (self.index_map[&b], self.index_map[&a]);
-        self.tree.find_edge(bi, ai).is_some()
+        let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
+        a == b || self.tree.find_edge(bi, ai).is_some()
     }
 
     pub fn get_id(&self, name: &str) -> Option<Id> {

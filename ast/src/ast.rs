@@ -73,12 +73,14 @@ impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "(fn({}))",
+            "({}): {} = {}",
             self.params
                 .iter()
                 .map(|param| param.to_string())
                 .collect::<Vec<_>>()
                 .join(" "),
+            self.type_id,
+            self.body,
         )
     }
 }
@@ -114,7 +116,7 @@ pub struct Value {
 }
 
 impl Value {
-    fn new(raw: Sexp, type_id: Id) -> Self {
+    pub fn new(raw: Sexp, type_id: Id) -> Self {
         Value { raw, type_id }
     }
 }

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let};
-use log::debug;
 use std::collections::{HashMap, HashSet};
 use structural_typesystem::{
     type_alloc::TypeAlloc,

@@ -1,5 +1,4 @@
-use std::fmt::Display;
-
+use std::{collections::BTreeMap, fmt::Display};
 use symbolic_expressions::Sexp;
 
 pub type Id = usize;
@@ -19,7 +18,7 @@ pub enum Type {
     },
     Record {
         id: Id,
-        types: Vec<(String, Type)>,
+        types: BTreeMap<String, Id>,
     },
 }
 
@@ -53,14 +52,13 @@ impl Display for Type {
             Type::Operator { id, name, types } => {
                 write!(
                     f,
-                    "{} #{}({})",
-                    name,
+                    "{} #{}",
                     id,
                     types
                         .iter()
                         .map(|t| t.to_string())
                         .collect::<Vec<_>>()
-                        .join(" ")
+                        .join(name)
                 )
             }
             Type::Variable { id, instance } => {
@@ -72,10 +70,11 @@ impl Display for Type {
             }
             Type::Record { id, types } => write!(
                 f,
-                "#{{{}}}",
+                "#{} {{{}}}",
+                id,
                 types
                     .iter()
-                    .map(|t| t.1.to_string())
+                    .map(|(k, v)| format!("{}: #{}", k, v))
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
