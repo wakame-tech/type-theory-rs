@@ -96,8 +96,17 @@ mod tests {
     use super::into_ast;
     use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
     use anyhow::Result;
-    use structural_typesystem::type_alloc::TypeAlloc;
+    use structural_typesystem::{
+        builtin_types::register_builtin_types, type_alloc::TypeAlloc, type_env::TypeEnv,
+    };
     use symbolic_expressions::parser::parse_str;
+
+    fn make_value(alloc: &TypeAlloc, value: &str, typ: &str) -> Result<Value> {
+        Ok(Value {
+            raw: parse_str(value)?,
+            type_id: alloc.from(typ)?,
+        })
+    }
 
     fn should_be_ast(alloc: &mut TypeAlloc, sexp: &str, expected: &Expr) -> Result<()> {
         let sexp = parse_str(sexp)?;
@@ -108,37 +117,36 @@ mod tests {
 
     #[test]
     fn int_literal() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let value = Value {
-            raw: parse_str("1")?,
-            type_id: alloc.from("int")?,
-        };
-        should_be_ast(&mut alloc, "1", &Expr::Literal(value))
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
+
+        let v = make_value(&alloc, "1", "int")?;
+        should_be_ast(&mut alloc, "1", &Expr::Literal(v))
     }
 
     #[test]
     fn bool_literal() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let value = Value {
-            raw: parse_str("true")?,
-            type_id: alloc.from("bool")?,
-        };
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
+
+        let value = make_value(&alloc, "true", "bool")?;
         should_be_ast(&mut alloc, "true", &Expr::Literal(value))
     }
 
     #[test]
     fn var_literal() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
+
         should_be_ast(&mut alloc, "x", &Expr::Variable("x".to_string()))
     }
 
     #[test]
     fn let_expr() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let value = Value {
-            raw: parse_str("1")?,
-            type_id: alloc.from("int")?,
-        };
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
+
+        let value = make_value(&alloc, "1", "int")?;
         should_be_ast(
             &mut alloc,
             "(let x (: int) 1)",
@@ -152,31 +160,31 @@ mod tests {
 
     #[test]
     fn let_wo_anno() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
 
+        let int = alloc.from("int")?;
+        let value = make_value(&alloc, "1", "int")?;
         should_be_ast(
             &mut alloc,
             "(let x 1)",
             &Expr::Let(Let::new(
                 "x".to_string(),
-                type_id,
-                Box::new(Expr::Literal(Value {
-                    raw: parse_str("1")?,
-                    type_id,
-                })),
+                int,
+                Box::new(Expr::Literal(value)),
             )),
         )
     }
 
     #[test]
     fn lam() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
 
+        let int = alloc.from("int")?;
         let fn_def = Expr::FnDef(FnDef::new(
             &mut alloc,
-            vec![Parameter::new("x".to_string(), type_id)],
+            vec![Parameter::new("x".to_string(), int)],
             Box::new(Expr::Variable("x".to_string())),
         ));
 
@@ -185,12 +193,13 @@ mod tests {
 
     #[test]
     fn lam_wo_anno() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
 
+        let int = alloc.from("int")?;
         let fn_def = Expr::FnDef(FnDef::new(
             &mut alloc,
-            vec![Parameter::new("x".to_string(), type_id)],
+            vec![Parameter::new("x".to_string(), int)],
             Box::new(Expr::Variable("x".to_string())),
         ));
 
@@ -199,17 +208,13 @@ mod tests {
 
     #[test]
     fn app() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
+
+        let value = make_value(&alloc, "1", "int")?;
         let fn_app = Expr::FnApp(FnApp::new(
             &mut alloc,
-            vec![
-                Expr::Variable("succ".to_string()),
-                Expr::Literal(Value {
-                    raw: parse_str("1")?,
-                    type_id,
-                }),
-            ],
+            vec![Expr::Variable("succ".to_string()), Expr::Literal(value)],
         ));
 
         should_be_ast(&mut alloc, "(succ 1)", &fn_app)
@@ -217,21 +222,18 @@ mod tests {
 
     #[test]
     fn op_redirects_app() -> Result<()> {
-        let (mut env, mut alloc) = setup_type_env()?;
-        let type_id = alloc.from("int")?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
+
+        let value1 = make_value(&alloc, "1", "int")?;
+        let value2 = make_value(&alloc, "2", "int")?;
 
         let fn_app = Expr::FnApp(crate::ast::FnApp::new(
             &mut alloc,
             vec![
                 Expr::Variable("+".to_string()),
-                Expr::Literal(Value {
-                    raw: parse_str("1")?,
-                    type_id,
-                }),
-                Expr::Literal(Value {
-                    raw: parse_str("2")?,
-                    type_id,
-                }),
+                Expr::Literal(value1),
+                Expr::Literal(value2),
             ],
         ));
 

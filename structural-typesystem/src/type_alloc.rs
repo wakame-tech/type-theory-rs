@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use crate::{
     issuer::Issuer,
-    type_env::TypeEnv,
     types::{Id, Type, TypeExpr},
 };
 use anyhow::{anyhow, Result};
@@ -76,8 +75,7 @@ impl TypeAlloc {
 
     pub fn from_id(&self, id: Id) -> Result<Type> {
         self.alloc
-            .get(id)
-            .map(|t| t.clone())
+            .get(id).cloned()
             .ok_or(anyhow!("type_id {} not found", id))
     }
 

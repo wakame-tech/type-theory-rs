@@ -95,7 +95,7 @@ mod test {
         let any = alloc.from("any")?;
         let int = alloc.from("int")?;
 
-        assert_eq!(is_subtype(&env, &alloc, int, any)?, true, "int < any");
+        assert!(is_subtype(&env, &alloc, int, any)?, "int < any");
         Ok(())
     }
 
@@ -109,9 +109,8 @@ mod test {
         let int_int = alloc.new_function(int, int);
         let any_int = alloc.new_function(any, int);
 
-        assert_eq!(
+        assert!(
             is_subtype(&env, &alloc, int_int, any_int)?,
-            true,
             "int -> int <= int -> any"
         );
         Ok(())
@@ -126,9 +125,8 @@ mod test {
         let int = alloc.from("int")?;
         let int_int = alloc.new_function(int, int);
 
-        assert_eq!(
+        assert!(
             is_subtype(&env, &alloc, int_int, any)?,
-            true,
             "int -> int <= any"
         );
         Ok(())
@@ -146,9 +144,8 @@ mod test {
             ("a".to_string(), any),
             ("b".to_string(), int),
         ]));
-        assert_eq!(
+        assert!(
             is_subtype(&env, &alloc, rec_a, rec_b)?,
-            true,
             "{{ a: int }} <= {{ a: any, b: int }}"
         );
         Ok(())

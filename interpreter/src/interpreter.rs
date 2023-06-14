@@ -3,7 +3,7 @@ use anyhow::{anyhow, Ok, Result};
 use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 
 impl Eval for FnDef {
-    fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
+    fn eval(&self, _env: &mut InterpreterEnv) -> Result<Expr> {
         Ok(Expr::FnDef(self.clone()))
     }
 }
@@ -23,7 +23,7 @@ impl Eval for FnApp {
         self.1
             .clone()
             .into_iter()
-            .map(|app| Ok(app))
+            .map(Ok)
             .rev()
             .reduce(|f, v| apply(env, &f?, &v?))
             .unwrap()

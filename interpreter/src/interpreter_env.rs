@@ -2,7 +2,7 @@ use anyhow::Result;
 use ast::ast::{Expr, FnDef, Parameter, Value};
 use std::{
     collections::HashMap,
-    fmt::{self, Display, Write},
+    fmt::{Display, Write},
 };
 use structural_typesystem::{
     builtin_types::register_builtin_types, type_alloc::TypeAlloc, type_env::TypeEnv,
@@ -94,7 +94,7 @@ impl InterpreterEnv {
             }
             Expr::Let(_) => todo!(),
             Expr::FnApp(app) => {
-                let typs = app
+                let params = app
                     .1
                     .iter()
                     .map(|expr| {
@@ -103,11 +103,12 @@ impl InterpreterEnv {
                             .map(|ty| format!("{}: {}", self.debug(expr).unwrap(), ty))
                     })
                     .collect::<Result<Vec<_>>>()?;
-                Ok(format!("({})", typs.join(" ")))
+                Ok(format!("({})", params.join(" ")))
             }
             Expr::FnDef(def) => {
-                let typ =
-            },
+                let typ = self.alloc.as_string(def.type_id, &mut Default::default())?;
+                Ok(format!("{}: {}", def.body, typ))
+            }
         }
     }
 }
@@ -120,7 +121,7 @@ impl Display for InterpreterEnv {
             writeln!(f, "{} = #{}", k, v)?;
         }
         writeln!(f, "variables:")?;
-        for (name, expr) in &self.variables {
+        for (_name, expr) in &self.variables {
             writeln!(f, "{}", self.debug(expr).unwrap())?;
         }
         Ok(())

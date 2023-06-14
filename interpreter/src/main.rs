@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
 use interpreter_env::InterpreterEnv;
-use log::debug;
+
 use symbolic_expressions::parser::parse_str;
 
 use crate::traits::{Eval, TypeCheck};

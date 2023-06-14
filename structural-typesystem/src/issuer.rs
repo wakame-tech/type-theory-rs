@@ -10,7 +10,7 @@ pub struct Issuer {
 impl Default for Issuer {
     fn default() -> Self {
         Issuer {
-            value: 'a' as u8,
+            value: b'a',
             set: HashMap::new(),
         }
     }

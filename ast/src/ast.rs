@@ -161,7 +161,7 @@ impl Expr {
     pub fn type_id(&self) -> Id {
         match self {
             Expr::Literal(lit) => lit.type_id,
-            Expr::Variable(v) => 0,
+            Expr::Variable(_v) => 0,
             Expr::Let(lt) => lt.type_id,
             Expr::FnApp(app) => app.0,
             Expr::FnDef(def) => def.type_id,

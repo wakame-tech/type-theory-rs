@@ -35,7 +35,7 @@ impl HMInferer {
                 let arg_type = self.analyse(&apps[1], alloc, env, non_generic)?;
                 let ret = alloc.new_variable();
 
-                let new_fn_type = alloc.new_function(arg_type, ret.clone());
+                let new_fn_type = alloc.new_function(arg_type, ret);
                 self.unify(&mut alloc.alloc, new_fn_type, fn_type)?;
                 Ok(ret)
             }
@@ -50,9 +50,9 @@ impl HMInferer {
                 Ok(alloc.new_function(arg.typ_id, ret))
             }
             Expr::Let(Let {
-                name,
+                name: _,
                 type_id,
-                value,
+                value: _,
             }) => {
                 Ok(*type_id)
                 // if let Some(id) = type_id {
@@ -83,7 +83,7 @@ impl HMInferer {
         match alloc.alloc.get(p).unwrap().clone() {
             Type::Variable { .. } => {
                 if self.is_generic(&mut alloc.alloc, p, non_generic) {
-                    mappings.entry(p).or_insert(alloc.new_variable()).clone()
+                    *mappings.entry(p).or_insert(alloc.new_variable())
                 } else {
                     p
                 }
@@ -142,17 +142,16 @@ impl HMInferer {
                 a_types
                     .iter()
                     .zip(b_types.iter())
-                    .map(|(aa, bb)| self.unify(alloc, *aa, *bb))
-                    .collect::<Result<_>>()
+                    .try_for_each(|(aa, bb)| self.unify(alloc, *aa, *bb))
             }
             (
                 Type::Record {
-                    id: a_id,
-                    types: a_types,
+                    id: _a_id,
+                    types: _a_types,
                 },
                 Type::Record {
-                    id: b_id,
-                    types: b_types,
+                    id: _b_id,
+                    types: _b_types,
                 },
             ) => {
                 todo!()
@@ -188,23 +187,24 @@ impl HMInferer {
             return true;
         }
         if let Type::Operator { types, .. } = alloc.get(prune_t).unwrap().clone() {
-            return self.occurs_in(alloc, v, &types);
+            self.occurs_in(alloc, v, &types)
         } else {
-            return false;
+            false
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::io::Write;
-    use std::{collections::HashSet, sync::Once};
-
     use crate::infer::HMInferer;
     use anyhow::Result;
     use ast::into_ast::into_ast;
     use log::LevelFilter;
-    use structural_typesystem::type_env::setup_type_env;
+    use std::io::Write;
+    use std::{collections::HashSet, sync::Once};
+    use structural_typesystem::builtin_types::register_builtin_types;
+    use structural_typesystem::type_alloc::TypeAlloc;
+    use structural_typesystem::type_env::TypeEnv;
     use symbolic_expressions::parser::parse_str;
 
     static INIT: Once = Once::new();
@@ -221,7 +221,8 @@ mod test {
 
     fn should_infer(expr: &str, type_expr: &str) -> Result<()> {
         setup();
-        let (mut env, mut alloc) = setup_type_env()?;
+        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
+        register_builtin_types(&mut env, &mut alloc)?;
         let inferer = HMInferer;
         let exp = into_ast(&mut alloc, &parse_str(expr)?)?;
         let infer_type_id = inferer.analyse(&exp, &mut alloc, &mut env, &HashSet::new())?;
