@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
+use symbolic_expressions::parser::parse_str;
 
 /// subtyping order for [TypeExpr]
 ///
@@ -13,7 +14,7 @@ use std::collections::HashSet;
 /// - `int -> int` <= `any`
 /// - `{ a: int }` <= `{ a: any, b: int }`
 pub fn is_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<bool> {
-    let any = env.get("any")?;
+    let any = env.get(&parse_str("any")?)?;
     let (a_ty, b_ty) = (env.alloc.from_id(a)?, env.alloc.from_id(b)?);
 
     match (a_ty, b_ty) {
@@ -74,12 +75,13 @@ pub fn is_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<bool> {
 mod test {
     use crate::{subtyping::is_subtype, type_env::TypeEnv};
     use anyhow::Result;
+    use symbolic_expressions::parser::parse_str;
 
     #[test]
     fn test_type_cmp_1() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let any = type_env.get("any")?;
-        let int = type_env.get("int")?;
+        let any = type_env.get(&parse_str("any")?)?;
+        let int = type_env.get(&parse_str("int")?)?;
 
         assert!(is_subtype(&mut type_env, int, any)?, "int < any");
         Ok(())
@@ -88,8 +90,8 @@ mod test {
     #[test]
     fn test_type_cmp_2() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let int_int = type_env.get("(-> int int)")?;
-        let any_int = type_env.get("(-> any int)")?;
+        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
+        let any_int = type_env.get(&parse_str("(-> any int)")?)?;
         assert!(
             is_subtype(&mut type_env, int_int, any_int)?,
             "int -> int <= int -> any"
@@ -100,8 +102,8 @@ mod test {
     #[test]
     fn test_type_cmp_3() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let any = type_env.get("any")?;
-        let int_int = type_env.get("(-> int int)")?;
+        let any = type_env.get(&parse_str("any")?)?;
+        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
         assert!(
             is_subtype(&mut type_env, int_int, any)?,
             "int -> int <= any"
@@ -112,8 +114,8 @@ mod test {
     #[test]
     fn test_type_cmp_record() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let rec_a = type_env.get("(record (a int))")?;
-        let rec_b = type_env.get("(record (a any) (b int))")?;
+        let rec_a = type_env.get(&parse_str("(record (a int))")?)?;
+        let rec_b = type_env.get(&parse_str("(record (a any) (b int))")?)?;
         assert!(
             is_subtype(&mut type_env, rec_a, rec_b)?,
             "{{ a: int }} <= {{ a: any, b: int }}"

@@ -50,7 +50,7 @@ impl FnDef {
 
 impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) = {}", self.param.to_string(), self.body,)
+        write!(f, "({}) -> {}", self.param.to_string(), self.body)
     }
 }
 
@@ -104,12 +104,16 @@ pub fn from_expr(expr: &Expr) -> Result<Value> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct MacroApp(pub Sexp);
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Value),
     Variable(String),
     Let(Let),
     FnApp(FnApp),
     FnDef(FnDef),
+    MacroApp(MacroApp),
 }
 
 impl Expr {
@@ -136,9 +140,10 @@ impl Display for Expr {
             Expr::Let(let_) => write!(f, "{}", let_),
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
+            Expr::MacroApp(macro_app) => write!(f, "{}", macro_app.0),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Program(pub Expr);
+pub struct Program(pub Vec<Expr>);

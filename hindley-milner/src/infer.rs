@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ast::ast::{Expr};
+use ast::ast::Expr;
 use std::collections::{HashMap, HashSet};
 use structural_typesystem::{
     type_env::TypeEnv,
@@ -10,7 +10,12 @@ use structural_typesystem::{
 struct HMInferer;
 
 impl HMInferer {
-    pub fn analyse(&self, expr: &Expr, _env: &mut TypeEnv, _non_generic: &HashSet<Id>) -> Result<Id> {
+    pub fn analyse(
+        &self,
+        expr: &Expr,
+        _env: &mut TypeEnv,
+        _non_generic: &HashSet<Id>,
+    ) -> Result<Id> {
         println!("expr = {:?}", expr);
         todo!();
 
@@ -216,7 +221,9 @@ mod test {
         let inferer = HMInferer;
         let exp = into_ast(&parse_str(expr)?)?;
         let infer_type_id = inferer.analyse(&exp, &mut type_env, &HashSet::new())?;
-        let type_id = type_env.get(type_expr)?;
+
+        let type_expr = parse_str(type_expr)?;
+        let type_id = type_env.get(&type_expr)?;
         assert_eq!(infer_type_id, type_id);
         Ok(())
     }

@@ -1,26 +1,40 @@
 use crate::builtin::main_context;
 use anyhow::{anyhow, Result};
 use ast::ast::Expr;
+use petgraph::{prelude::NodeIndex, Graph};
 use std::{collections::HashMap, fmt::Display};
 use structural_typesystem::{type_env::TypeEnv, types::Id};
 
 #[derive(Debug, Clone)]
 pub struct Context {
-    pub variables: HashMap<String, Expr>,
+    pub name: String,
+    variables: HashMap<String, (Id, Expr)>,
 }
 
 impl Context {
-    pub fn new() -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
+            name: name.to_string(),
             variables: HashMap::new(),
         }
+    }
+
+    pub fn insert(&mut self, name: &str, ty_id: Id, expr: Expr) {
+        self.variables.insert(name.to_string(), (ty_id, expr));
+    }
+
+    pub fn get(&self, name: &str) -> Result<(Id, Expr)> {
+        self.variables
+            .get(name)
+            .ok_or(anyhow!("variable {} not found", name))
+            .cloned()
     }
 }
 
 impl Display for Context {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (_name, expr) in &self.variables {
-            writeln!(f, "- {}", expr)?;
+        for (name, (ty_id, expr)) in &self.variables {
+            writeln!(f, "- {} :: {} = {}", name, ty_id, expr)?;
         }
         Ok(())
     }
@@ -28,47 +42,111 @@ impl Display for Context {
 
 #[derive(Debug, Clone)]
 pub struct InterpreterEnv {
-    pub current_context: String,
     // TODO: type_env per each context
     pub type_env: TypeEnv,
-    pub contexts: HashMap<String, Context>,
+    pub current_context: NodeIndex,
+    pub context_map: HashMap<String, NodeIndex>,
+    pub context_tree: Graph<Context, ()>,
 }
 
 impl Default for InterpreterEnv {
     fn default() -> Self {
         let mut global_type_env = TypeEnv::default();
         let main_context = main_context(&mut global_type_env).unwrap();
+        let mut context_tree = Graph::new();
+        let ni = context_tree.add_node(main_context);
+
         Self {
-            current_context: "main".to_string(),
+            current_context: ni,
             type_env: global_type_env,
-            contexts: HashMap::from_iter(vec![("main".to_string(), main_context)]),
+            context_map: HashMap::from_iter(vec![("main".to_string(), ni)]),
+            context_tree,
         }
     }
 }
 
 impl InterpreterEnv {
+    pub fn context(&self) -> &Context {
+        &self.context_tree[self.current_context]
+    }
+
+    pub fn context_mut(&mut self) -> &mut Context {
+        &mut self.context_tree[self.current_context]
+    }
+
+    pub fn new_context(&mut self, name: &str) -> NodeIndex {
+        let ctx = Context::new(name);
+        let ni = self.context_tree.add_node(ctx);
+        self.context_map.insert(name.to_string(), ni);
+        ni
+    }
+
+    pub fn move_context(&mut self, from: &str, to: &str) {
+        let (from_ni, to_ni) = (self.context_map[from], self.context_map[to]);
+        let (old_ctx_vars, new_ctx) = (
+            self.context_tree[from_ni].variables.clone(),
+            &mut self.context_tree[to_ni],
+        );
+        new_ctx.variables = old_ctx_vars;
+        self.context_tree.remove_node(from_ni);
+        self.context_map.remove(from);
+    }
+
+    /// set current context as parent
     pub fn switch_context(&mut self, name: &str) -> &mut Context {
-        self.current_context = name.to_string();
-        self.contexts
-            .entry(name.to_string())
-            .or_insert_with(Context::new)
-    }
-
-    pub fn new_var(&mut self, name: &str, expr: Expr, typ: Id) {
-        self.type_env.add(name, typ);
-        let context = self.switch_context(name);
-        context.variables.insert(name.to_string(), expr);
-    }
-
-    pub fn get_variable(&self, name: &str) -> Result<Expr> {
-        let ctx = self
-            .contexts
-            .get(&self.current_context)
-            .ok_or(anyhow!("{} not found", name))?;
-        if let Some(e @ Expr::Variable(_)) = ctx.variables.get(name) {
-            Ok(e.clone())
+        if let Some(ni) = self.context_map.get(name) {
+            self.current_context = *ni;
+            log::debug!(
+                "switch_ctx #{} -> #{}",
+                self.current_context.index(),
+                ni.index()
+            );
+            &mut self.context_tree[*ni]
         } else {
-            Err(anyhow!("{} not found (env={})", name, self.current_context))
+            // add
+            let ni = self.new_context(name);
+            let parent = self.current_context;
+            println!("new ctx '{}'(#{}) created", name, ni.index());
+
+            // link
+            self.context_tree.add_edge(parent, ni, ());
+            println!("link #{} -> #{}", parent.index(), ni.index());
+
+            // switch
+            self.current_context = ni;
+
+            &mut self.context_tree[ni]
+        }
+    }
+
+    pub fn new_var(&mut self, name: &str, expr: Expr, ty_id: Id) {
+        let ctx = self.context_mut();
+        ctx.insert(name, ty_id, expr);
+    }
+
+    pub fn get_variable(&self, name: &str) -> Result<(Id, Expr)> {
+        let mut ni = self.current_context;
+        let mut ctx_trace = vec![];
+        loop {
+            let ctx = &self.context_tree[ni];
+            ctx_trace.push(ctx.name.clone());
+            if let Ok(r) = ctx.get(name) {
+                return Ok(r);
+            }
+            if let Some(parent_ni) = self
+                .context_tree
+                .neighbors_directed(ni, petgraph::Direction::Incoming)
+                .collect::<Vec<_>>()
+                .first()
+            {
+                ni = *parent_ni;
+            } else {
+                return Err(anyhow!(
+                    "variable {} not found\ntrace: {:?}",
+                    name,
+                    ctx_trace
+                ));
+            }
         }
     }
 }
@@ -76,8 +154,8 @@ impl InterpreterEnv {
 impl Display for InterpreterEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "type_env: {}", self.type_env)?;
-        for (name, context) in self.contexts.iter() {
-            writeln!(f, "{} {}", name, context)?;
+        for context in self.context_tree.node_weights() {
+            writeln!(f, "{}", context)?;
         }
         Ok(())
     }

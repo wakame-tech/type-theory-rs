@@ -43,7 +43,6 @@ impl TypeAlloc {
             types: vec![arg, ret],
         };
         self.alloc.push(typ);
-        println!("new_function: {} = {} -> {}", id, arg, ret);
         id
     }
 
@@ -134,8 +133,8 @@ mod tests {
 
     #[test]
     fn parse_fn_type() -> Result<()> {
-        let mut type_env = TypeEnv::default();
-        let int_int = type_env.get("(-> int int)")?;
+        let type_env = TypeEnv::default();
+        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
         assert_eq!(
             type_env.alloc.as_sexp(int_int, &mut Default::default())?,
             parse_str("(-> int int)")?,
@@ -145,8 +144,8 @@ mod tests {
 
     #[test]
     fn parse_record_type() -> Result<()> {
-        let mut type_env = TypeEnv::default();
-        let rec = type_env.get("(record (a int))")?;
+        let type_env = TypeEnv::default();
+        let rec = type_env.get(&parse_str("(record (a int))")?)?;
         assert_eq!(
             type_env.alloc.as_sexp(rec, &mut Default::default())?,
             parse_str("(record (a int))")?,

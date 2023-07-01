@@ -1,4 +1,4 @@
-use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
+use crate::ast::{Expr, FnApp, FnDef, Let, MacroApp, Parameter, Value};
 use anyhow::Result;
 use structural_typesystem::{type_alloc::TypeAlloc, types::Id};
 use symbolic_expressions::{parser::parse_str, Sexp};
@@ -21,18 +21,19 @@ pub fn parse_type(alloc: &mut TypeAlloc, type_sexp: &Sexp) -> Result<Id> {
     alloc.from_sexp(&list[1])
 }
 
-/// parse (x (: int))
+/// parse (x : int)
 pub fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     let Ok(list) = sexp.list() else {
         return Err(anyhow::anyhow!("parameter must be list"));
     };
+    anyhow::ensure!(list[1].string()? == ":");
     Ok(Parameter::new(
         list[0].string()?.to_string(),
-        list[1].clone(),
+        list[2].clone(),
     ))
 }
 
-/// (lam (x (: int)) x)
+/// (lam (x : int) x)
 pub fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
     let param = parse_parameter(&list[1])?;
     let body = list[2].clone();
@@ -45,7 +46,6 @@ pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
     let let_node = match list.len() {
         3 => {
             let (name, val) = (list[1].string()?, &list[2]);
-            println!("let {} = {}", &name, val);
             let val = into_ast(val)?;
             Let::new(name.to_string(), None, Box::new(val))
         }
@@ -54,7 +54,7 @@ pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
             let val = into_ast(val)?;
             Let::new(name.to_string(), Some(typ.clone()), Box::new(val))
         }
-        _ => panic!("invalid let"),
+        _ => panic!("let/3 nor let/4"),
     };
     Ok(Expr::Let(let_node))
 }
@@ -82,6 +82,13 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             Sexp::String(ref lam) if lam == "lam" => parse_lambda(list),
             Sexp::String(ref lt) if lt == "let" => parse_let(list),
             _ if list.len() == 2 => parse_apply(&list[0], &list[1]),
+            _ if list[0].string()?.ends_with('!') => Ok(Expr::MacroApp(MacroApp(Sexp::List(
+                vec![
+                    vec![Sexp::String(list[0].string()?.to_string())],
+                    list[1..].to_vec(),
+                ]
+                .concat(),
+            )))),
             _ => Err(anyhow::anyhow!("illegal operands")),
         },
         Sexp::String(lit) => match lit.as_str() {
@@ -99,7 +106,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
 
 #[cfg(test)]
 mod tests {
-    use super::into_ast;
+    use super::{into_ast, parse_parameter};
     use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
     use anyhow::Result;
     use symbolic_expressions::{parser::parse_str, Sexp};
@@ -132,6 +139,16 @@ mod tests {
     #[test]
     fn var_literal() -> Result<()> {
         should_be_ast("x", &Expr::Variable("x".to_string()))
+    }
+
+    #[test]
+    fn parameter() -> Result<()> {
+        let param = parse_parameter(&parse_str("(: a int)")?)?;
+        assert_eq!(
+            param,
+            Parameter::new("a".to_string(), Sexp::String("int".to_string()))
+        );
+        Ok(())
     }
 
     #[test]

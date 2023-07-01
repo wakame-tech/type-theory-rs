@@ -13,3 +13,5 @@ structural-typesystem = { path = "../structural-typesystem" }
 hindley-milner = { path = "../hindley-milner" }
 ast = { path = "../ast" }
 rand = "0.8.5"
+petgraph = "0.6.3"
+ptree = "0.4.0"
