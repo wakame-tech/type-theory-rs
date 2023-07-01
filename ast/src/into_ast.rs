@@ -36,12 +36,14 @@ pub fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
 /// (lam (x : int) x)
 pub fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
     let param = parse_parameter(&list[1])?;
-    let body = list[2].clone();
-    let body_ast = Box::new(into_ast(&body)?);
-    Ok(Expr::FnDef(FnDef::new(param, body_ast)))
+    let body = Box::new(into_ast(&list[2])?);
+    log::debug!("parse_lambda {} {}", param, body);
+    Ok(Expr::FnDef(FnDef::new(param, body)))
 }
 
-/// (let a (: int) 1) or (let a 1)
+///
+/// - with type annotation: `(let a int 1)`
+/// - without type annotation: `(let a 1)`
 pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
     let let_node = match list.len() {
         3 => {
@@ -51,6 +53,7 @@ pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
         }
         4 => {
             let (name, typ, val) = (list[1].string()?, &list[2], &list[3]);
+            log::debug!("{} {} {}", name, typ, val);
             let val = into_ast(val)?;
             Let::new(name.to_string(), Some(typ.clone()), Box::new(val))
         }

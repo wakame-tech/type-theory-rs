@@ -2,6 +2,7 @@ use crate::traits::{Eval, TypeCheck};
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
 use interpreter_env::InterpreterEnv;
+use simple_logger::SimpleLogger;
 use std::{env, fs::File, io::Read};
 use symbolic_expressions::parser::parse_str;
 
@@ -12,6 +13,11 @@ pub mod traits;
 pub mod type_check;
 
 fn main() -> Result<()> {
+    SimpleLogger::new()
+        .without_timestamps()
+        .with_level(log::LevelFilter::Debug)
+        .init()?;
+
     let args = env::args().collect::<Vec<_>>();
     let ml_path = args.get(1).ok_or(anyhow::anyhow!("require ml_path"))?;
     let mut f = File::open(ml_path)?;

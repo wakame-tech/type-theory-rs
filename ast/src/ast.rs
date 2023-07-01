@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::fmt::{Debug, Display};
+use structural_typesystem::types::Id;
 use symbolic_expressions::Sexp;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,7 +72,7 @@ impl Display for Let {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "let {}: {} = {};",
+            "let {}: {} = {}",
             self.name,
             self.typ.as_ref().unwrap_or(&Sexp::Empty),
             self.value

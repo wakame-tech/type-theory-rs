@@ -8,22 +8,23 @@ use symbolic_expressions::Sexp;
 
 impl Eval for FnDef {
     fn eval(&self, _env: &mut InterpreterEnv) -> Result<Expr> {
+        log::debug!("FnDef::eval {}", self);
         Ok(Expr::FnDef(self.clone()))
     }
 }
 
 impl Eval for Let {
     /// (let a int 1)
-    /// if value has context, move it
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         let expr = self.value.eval(env)?;
         let typ = if let Some(typ) = &self.typ {
             env.type_env.alloc.from_sexp(typ)?
         } else {
-            todo!();
+            todo!()
         };
         env.new_var(&self.name, expr.clone(), typ);
 
+        // if value has context, move it
         if env.context_map.contains_key(&self.value.to_string()) {
             env.new_context(&self.name);
             env.move_context(&self.value.to_string(), &self.name);
@@ -36,6 +37,7 @@ impl Eval for Let {
 
 impl Eval for FnApp {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
+        log::debug!("FnApp::eval {}", self);
         let original_ctx = &env.context().name.to_string();
         // eval param
         let param = self.1.eval(env)?;
