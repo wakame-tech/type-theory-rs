@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::collections::BTreeMap;
 use symbolic_expressions::Sexp;
 
 pub type Id = usize;
@@ -10,7 +10,9 @@ pub enum Type {
         id: Id,
         instance: Option<Id>,
     },
-    /// ex. function type "->", tuple type ","
+    /// - function type "->"
+    /// - apply type "app"
+    /// - tuple type ","
     Operator {
         id: Id,
         name: String,
@@ -42,42 +44,6 @@ impl Type {
                 *instance = Some(id);
             }
             _ => panic!("set_instance called on non-variable type"),
-        }
-    }
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Type::Operator { id, name, types } => {
-                write!(
-                    f,
-                    "{} #{}",
-                    id,
-                    types
-                        .iter()
-                        .map(|t| t.to_string())
-                        .collect::<Vec<_>>()
-                        .join(name)
-                )
-            }
-            Type::Variable { id, instance } => {
-                if let Some(inst) = instance {
-                    write!(f, "#{}", inst)
-                } else {
-                    write!(f, "#{}", id)
-                }
-            }
-            Type::Record { id, types } => write!(
-                f,
-                "#{} {{{}}}",
-                id,
-                types
-                    .iter()
-                    .map(|(k, v)| format!("{}: #{}", k, v))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
         }
     }
 }

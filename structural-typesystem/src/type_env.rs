@@ -1,13 +1,22 @@
-use crate::{type_alloc::TypeAlloc, types::Id};
+use crate::{
+    type_alloc::TypeAlloc,
+    types::{Id, TypeExpr},
+};
 use anyhow::Result;
 use petgraph::prelude::*;
-use ptree::graph::print_graph;
-use std::{collections::HashMap, fmt::Debug};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::{Debug, Display},
+};
+use symbolic_expressions::Sexp;
 
 /// [TypeEnv] will be created per each [Expr::FnDef]
 #[derive(Debug, Clone)]
 pub struct TypeEnv {
-    pub id_map: HashMap<String, Id>,
+    pub alloc: TypeAlloc,
+    /// key is stringified sexp
+    id_map: HashMap<String, Id>,
+    /// subtyping tree
     index_map: HashMap<Id, NodeIndex>,
     tree: Graph<Id, ()>,
 }
@@ -15,37 +24,75 @@ pub struct TypeEnv {
 impl TypeEnv {
     pub fn new() -> Self {
         Self {
+            alloc: TypeAlloc::new(),
             id_map: HashMap::new(),
             index_map: HashMap::new(),
             tree: Graph::new(),
         }
     }
 
-    pub fn add(&mut self, name: &str, type_id: Id) {
-        self.id_map.insert(name.to_string(), type_id);
-        let i = self.tree.add_node(type_id);
-        self.index_map.insert(type_id, i);
+    pub fn get(&self, type_expr: &TypeExpr) -> Result<Id> {
+        self.id_map
+            .get(type_expr.to_string().as_str())
+            .cloned()
+            .ok_or(anyhow::anyhow!("{} not found", type_expr))
     }
 
     /// register `a` as subtype of `b`
-    pub fn subtype(&mut self, a: Id, b: Id) {
+    pub fn new_subtype(&mut self, a: Id, b: Id) {
         let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
         self.tree.add_edge(bi, ai, ());
     }
 
+    pub fn new_type(&mut self, type_expr: &TypeExpr) -> Result<Id> {
+        match type_expr {
+            Sexp::String(s) => {
+                let id = self.alloc.new_primitive(s);
+                self.register_type_id(type_expr, id);
+                Ok(id)
+            }
+            Sexp::List(list) if list[0].string()? == "->" => {
+                let (f, t) = (self.get(&list[1])?, self.get(&list[2])?);
+                let id = self.alloc.new_function(f, t);
+                Ok(id)
+            }
+            Sexp::List(list) if list[0].string()? == "record" => {
+                let entries = list[1..]
+                    .iter()
+                    .map(|s| -> Result<_> {
+                        let l = s.list()?;
+                        let (k, v) = (&l[0].string()?, &l[1]);
+                        let id = self.new_type(v)?;
+                        Ok((k.to_string(), id))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let id = self.alloc.new_record(BTreeMap::from_iter(entries));
+                self.register_type_id(type_expr, id);
+                Ok(id)
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {
+        self.id_map.insert(expr.to_string(), type_id);
+        let i = self.tree.add_node(type_id);
+        self.index_map.insert(type_id, i);
+    }
+
     /// returns true is a is subtype of b
-    pub fn is_subtype(&self, a: Id, b: Id) -> bool {
+    pub fn has_edge(&self, a: Id, b: Id) -> bool {
         let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
         a == b || self.tree.find_edge(bi, ai).is_some()
     }
+}
 
-    pub fn get_id(&self, name: &str) -> Option<Id> {
-        self.id_map.get(name).cloned()
-    }
-
-    pub fn debug(&self, alloc: &TypeAlloc) -> Result<()> {
-        let any = alloc.from("any")?;
-        print_graph(&self.tree, self.index_map[&any])?;
-        Ok(())
+impl Display for TypeEnv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "{}",
+            self.id_map.keys().cloned().collect::<Vec<_>>().join(",")
+        )
     }
 }

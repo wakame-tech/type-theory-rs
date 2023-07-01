@@ -1,29 +1,34 @@
+use crate::traits::{Eval, TypeCheck};
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
 use interpreter_env::InterpreterEnv;
-
+use std::{env, fs::File, io::Read};
 use symbolic_expressions::parser::parse_str;
 
-use crate::traits::{Eval, TypeCheck};
-
+pub mod builtin;
 pub mod interpreter;
 pub mod interpreter_env;
 pub mod traits;
 pub mod type_check;
 
 fn main() -> Result<()> {
-    // let sexp = parse_str("(let a (: int) 1)")?;
-    let sexp = parse_str("(id 1)")?;
-    // "(+ 1 2)"
-    // "(let a int 1)"
-    // "(let x (app zero? 3))"
-    // "(let a (app zero? 1))"
-    // "(app (lam ((: x int)) x) 1)"
-    let mut env = InterpreterEnv::new()?;
+    let args = env::args().collect::<Vec<_>>();
+    let ml_path = args.get(1).ok_or(anyhow::anyhow!("require ml_path"))?;
+    let mut f = File::open(ml_path)?;
+    let mut program = String::new();
+    f.read_to_string(&mut program)?;
+    let sexps = program
+        .split('\n')
+        .map(|line| parse_str(line).map_err(|e| anyhow::anyhow!("{:?}", e)))
+        .collect::<Result<Vec<_>>>()?;
+
+    let program = sexps.iter().map(into_ast).collect::<Result<Vec<_>>>()?;
+    let mut env = InterpreterEnv::default();
     println!("{}", &env);
-    let program = Program(into_ast(&mut env.alloc, &sexp)?);
-    program.type_check(&env)?;
+    let program = Program(program);
+    program.type_check(&mut env)?;
+
     let ret = program.eval(&mut env)?;
-    println!("eval: {:?} -> {}", program, &ret);
+    println!("{}", &ret);
     Ok(())
 }

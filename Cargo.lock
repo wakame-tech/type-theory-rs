@@ -233,6 +233,8 @@ dependencies = [
  "ast",
  "hindley-milner",
  "log",
+ "petgraph",
+ "ptree",
  "rand",
  "structural-typesystem",
  "symbolic_expressions",

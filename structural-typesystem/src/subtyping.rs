@@ -1,10 +1,10 @@
 use crate::{
-    type_alloc::TypeAlloc,
     type_env::TypeEnv,
     types::{Id, Type},
 };
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
+use symbolic_expressions::parser::parse_str;
 
 /// subtyping order for [TypeExpr]
 ///
@@ -13,11 +13,9 @@ use std::collections::HashSet;
 /// - `int -> int` <= `int -> int`
 /// - `int -> int` <= `any`
 /// - `{ a: int }` <= `{ a: any, b: int }`
-pub fn is_subtype(env: &TypeEnv, alloc: &TypeAlloc, a: Id, b: Id) -> Result<bool> {
-    let any = alloc.from("any")?;
-
-    let (a_ty, b_ty) = (alloc.from_id(a)?, alloc.from_id(b)?);
-    println!("{} <=? {}", a_ty, b_ty);
+pub fn is_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<bool> {
+    let any = env.get(&parse_str("any")?)?;
+    let (a_ty, b_ty) = (env.alloc.from_id(a)?, env.alloc.from_id(b)?);
 
     match (a_ty, b_ty) {
         // any vs ?
@@ -36,7 +34,7 @@ pub fn is_subtype(env: &TypeEnv, alloc: &TypeAlloc, a: Id, b: Id) -> Result<bool
                 types: b_types,
                 ..
             },
-        ) if a_types.is_empty() && b_types.is_empty() => Ok(env.is_subtype(a_id, b_id)),
+        ) if a_types.is_empty() && b_types.is_empty() => Ok(env.has_edge(a_id, b_id)),
         // fn types
         (
             Type::Operator {
@@ -52,7 +50,7 @@ pub fn is_subtype(env: &TypeEnv, alloc: &TypeAlloc, a: Id, b: Id) -> Result<bool
         ) if a_name == "->" && b_name == "->" => Ok(a_types
             .iter()
             .zip(b_types.iter())
-            .map(|(ae, be)| is_subtype(env, alloc, *ae, *be))
+            .map(|(ae, be)| is_subtype(env, *ae, *be))
             .collect::<Result<Vec<_>>>()?
             .iter()
             .all(|e| *e)),
@@ -65,52 +63,37 @@ pub fn is_subtype(env: &TypeEnv, alloc: &TypeAlloc, a: Id, b: Id) -> Result<bool
             let b_keys = b_types.keys().collect::<HashSet<_>>();
             Ok(a_keys.is_subset(&b_keys)
                 && a_keys.into_iter().all(|k| {
-                    is_subtype(
-                        env,
-                        alloc,
-                        *a_types.get(k).unwrap(),
-                        *b_types.get(k).unwrap(),
-                    )
-                    .unwrap_or(false)
+                    is_subtype(env, *a_types.get(k).unwrap(), *b_types.get(k).unwrap())
+                        .unwrap_or(false)
                 }))
         }
-        (a_ty, b_ty) => Err(anyhow!("{} <= {} not supported", a_ty, b_ty)),
+        _ => Ok(false),
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        builtin_types::register_builtin_types, subtyping::is_subtype, type_alloc::TypeAlloc,
-        type_env::TypeEnv,
-    };
+    use crate::{subtyping::is_subtype, type_env::TypeEnv};
     use anyhow::Result;
-    use std::collections::BTreeMap;
+    use symbolic_expressions::parser::parse_str;
 
     #[test]
     fn test_type_cmp_1() -> Result<()> {
-        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
-        register_builtin_types(&mut env, &mut alloc)?;
+        let mut type_env = TypeEnv::default();
+        let any = type_env.get(&parse_str("any")?)?;
+        let int = type_env.get(&parse_str("int")?)?;
 
-        let any = alloc.from("any")?;
-        let int = alloc.from("int")?;
-
-        assert!(is_subtype(&env, &alloc, int, any)?, "int < any");
+        assert!(is_subtype(&mut type_env, int, any)?, "int < any");
         Ok(())
     }
 
     #[test]
     fn test_type_cmp_2() -> Result<()> {
-        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
-        register_builtin_types(&mut env, &mut alloc)?;
-
-        let any = alloc.from("any")?;
-        let int = alloc.from("int")?;
-        let int_int = alloc.new_function(int, int);
-        let any_int = alloc.new_function(any, int);
-
+        let mut type_env = TypeEnv::default();
+        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
+        let any_int = type_env.get(&parse_str("(-> any int)")?)?;
         assert!(
-            is_subtype(&env, &alloc, int_int, any_int)?,
+            is_subtype(&mut type_env, int_int, any_int)?,
             "int -> int <= int -> any"
         );
         Ok(())
@@ -118,15 +101,11 @@ mod test {
 
     #[test]
     fn test_type_cmp_3() -> Result<()> {
-        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
-        register_builtin_types(&mut env, &mut alloc)?;
-
-        let any = alloc.from("any")?;
-        let int = alloc.from("int")?;
-        let int_int = alloc.new_function(int, int);
-
+        let mut type_env = TypeEnv::default();
+        let any = type_env.get(&parse_str("any")?)?;
+        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
         assert!(
-            is_subtype(&env, &alloc, int_int, any)?,
+            is_subtype(&mut type_env, int_int, any)?,
             "int -> int <= any"
         );
         Ok(())
@@ -134,18 +113,11 @@ mod test {
 
     #[test]
     fn test_type_cmp_record() -> Result<()> {
-        let (mut env, mut alloc) = (TypeEnv::new(), TypeAlloc::new());
-        register_builtin_types(&mut env, &mut alloc)?;
-
-        let int = alloc.from("int")?;
-        let any = alloc.from("any")?;
-        let rec_a = alloc.new_record(BTreeMap::from_iter(vec![("a".to_string(), int)]));
-        let rec_b = alloc.new_record(BTreeMap::from_iter(vec![
-            ("a".to_string(), any),
-            ("b".to_string(), int),
-        ]));
+        let mut type_env = TypeEnv::default();
+        let rec_a = type_env.get(&parse_str("(record (a int))")?)?;
+        let rec_b = type_env.get(&parse_str("(record (a any) (b int))")?)?;
         assert!(
-            is_subtype(&env, &alloc, rec_a, rec_b)?,
+            is_subtype(&mut type_env, rec_a, rec_b)?,
             "{{ a: int }} <= {{ a: any, b: int }}"
         );
         Ok(())

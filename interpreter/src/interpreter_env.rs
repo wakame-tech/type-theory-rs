@@ -1,113 +1,151 @@
-use anyhow::Result;
-use ast::ast::{Expr, FnDef, Parameter, Value};
-use std::{
-    collections::HashMap,
-    fmt::{Display, Write},
-};
-use structural_typesystem::{
-    builtin_types::register_builtin_types, type_alloc::TypeAlloc, type_env::TypeEnv,
-};
-use symbolic_expressions::Sexp;
+use crate::builtin::main_context;
+use anyhow::{anyhow, Result};
+use ast::ast::Expr;
+use petgraph::{prelude::NodeIndex, Graph};
+use std::{collections::HashMap, fmt::Display};
+use structural_typesystem::{type_env::TypeEnv, types::Id};
+
+#[derive(Debug, Clone)]
+pub struct Context {
+    pub name: String,
+    variables: HashMap<String, (Id, Expr)>,
+}
+
+impl Context {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            variables: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, name: &str, ty_id: Id, expr: Expr) {
+        self.variables.insert(name.to_string(), (ty_id, expr));
+    }
+
+    pub fn get(&self, name: &str) -> Result<(Id, Expr)> {
+        self.variables
+            .get(name)
+            .ok_or(anyhow!("variable {} not found", name))
+            .cloned()
+    }
+}
+
+impl Display for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (name, (ty_id, expr)) in &self.variables {
+            writeln!(f, "- {} :: {} = {}", name, ty_id, expr)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct InterpreterEnv {
-    pub alloc: TypeAlloc,
+    // TODO: type_env per each context
     pub type_env: TypeEnv,
-    pub variables: HashMap<String, Expr>,
+    pub current_context: NodeIndex,
+    pub context_map: HashMap<String, NodeIndex>,
+    pub context_tree: Graph<Context, ()>,
 }
 
-impl InterpreterEnv {
-    pub fn new() -> Result<Self> {
-        let mut alloc = TypeAlloc::new();
-        let mut type_env = TypeEnv::new();
-        register_builtin_types(&mut type_env, &mut alloc)?;
-        let mut env = Self {
-            alloc,
-            type_env,
-            variables: HashMap::new(),
-        };
-        register_builtin_vars(&mut env)?;
-        Ok(env)
+impl Default for InterpreterEnv {
+    fn default() -> Self {
+        let mut global_type_env = TypeEnv::default();
+        let main_context = main_context(&mut global_type_env).unwrap();
+        let mut context_tree = Graph::new();
+        let ni = context_tree.add_node(main_context);
+
+        Self {
+            current_context: ni,
+            type_env: global_type_env,
+            context_map: HashMap::from_iter(vec![("main".to_string(), ni)]),
+            context_tree,
+        }
     }
 }
 
-fn register_builtin_vars(env: &mut InterpreterEnv) -> Result<()> {
-    let int = env.alloc.from("int")?;
-    let int_int = env.alloc.new_function(int, int);
-    let int_int_int = env.alloc.new_function(int_int, int);
-    env.type_env.add("+", int_int_int);
-    env.type_env.add("a", int);
-    env.type_env.add("b", int);
-
-    let add_fn = FnDef::new(
-        &mut env.alloc,
-        vec![
-            Parameter::new("a".to_string(), int),
-            Parameter::new("b".to_string(), int),
-        ],
-        Box::new(Expr::Literal(Value {
-            raw: Sexp::Empty,
-            type_id: int,
-        })),
-    );
-    env.new_var("+".to_string(), Expr::FnDef(add_fn));
-
-    let a = env.alloc.new_variable();
-    let a_a = env.alloc.new_function(a, a);
-    env.type_env.add("v", a);
-    env.type_env.add("id", a_a);
-
-    let id_fn = FnDef::new(
-        &mut env.alloc,
-        vec![Parameter::new("v".to_string(), a)],
-        Box::new(Expr::Literal(Value {
-            raw: Sexp::Empty,
-            type_id: int,
-        })),
-    );
-    env.new_var("id".to_string(), Expr::FnDef(id_fn));
-
-    Ok(())
-}
-
 impl InterpreterEnv {
-    pub fn new_var(&mut self, name: String, expr: Expr) {
-        self.type_env.add(&name, expr.type_id());
-        self.variables.insert(name, expr);
+    pub fn context(&self) -> &Context {
+        &self.context_tree[self.current_context]
     }
 
-    pub fn debug(&self, expr: &Expr) -> Result<String> {
-        match expr {
-            Expr::Literal(lit) => {
-                let typ = self.alloc.as_string(lit.type_id, &mut Default::default())?;
-                Ok(format!("{}: {}", lit.raw, typ))
+    pub fn context_mut(&mut self) -> &mut Context {
+        &mut self.context_tree[self.current_context]
+    }
+
+    pub fn new_context(&mut self, name: &str) -> NodeIndex {
+        let ctx = Context::new(name);
+        let ni = self.context_tree.add_node(ctx);
+        self.context_map.insert(name.to_string(), ni);
+        ni
+    }
+
+    pub fn move_context(&mut self, from: &str, to: &str) {
+        let (from_ni, to_ni) = (self.context_map[from], self.context_map[to]);
+        let (old_ctx_vars, new_ctx) = (
+            self.context_tree[from_ni].variables.clone(),
+            &mut self.context_tree[to_ni],
+        );
+        new_ctx.variables = old_ctx_vars;
+        self.context_tree.remove_node(from_ni);
+        self.context_map.remove(from);
+    }
+
+    /// set current context as parent
+    pub fn switch_context(&mut self, name: &str) -> &mut Context {
+        if let Some(ni) = self.context_map.get(name) {
+            self.current_context = *ni;
+            log::debug!(
+                "switch_ctx #{} -> #{}",
+                self.current_context.index(),
+                ni.index()
+            );
+            &mut self.context_tree[*ni]
+        } else {
+            // add
+            let ni = self.new_context(name);
+            let parent = self.current_context;
+            println!("new ctx '{}'(#{}) created", name, ni.index());
+
+            // link
+            self.context_tree.add_edge(parent, ni, ());
+            println!("link #{} -> #{}", parent.index(), ni.index());
+
+            // switch
+            self.current_context = ni;
+
+            &mut self.context_tree[ni]
+        }
+    }
+
+    pub fn new_var(&mut self, name: &str, expr: Expr, ty_id: Id) {
+        let ctx = self.context_mut();
+        ctx.insert(name, ty_id, expr);
+    }
+
+    pub fn get_variable(&self, name: &str) -> Result<(Id, Expr)> {
+        let mut ni = self.current_context;
+        let mut ctx_trace = vec![];
+        loop {
+            let ctx = &self.context_tree[ni];
+            ctx_trace.push(ctx.name.clone());
+            if let Ok(r) = ctx.get(name) {
+                return Ok(r);
             }
-            Expr::Variable(var) => {
-                let var = self
-                    .variables
-                    .get(var)
-                    .ok_or(anyhow::anyhow!("not found"))?;
-                let typ = self
-                    .alloc
-                    .as_string(var.type_id(), &mut Default::default())?;
-                Ok(format!("{}: {}", var, typ))
-            }
-            Expr::Let(_) => todo!(),
-            Expr::FnApp(app) => {
-                let params = app
-                    .1
-                    .iter()
-                    .map(|expr| {
-                        self.alloc
-                            .as_string(expr.type_id(), &mut Default::default())
-                            .map(|ty| format!("{}: {}", self.debug(expr).unwrap(), ty))
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(format!("({})", params.join(" ")))
-            }
-            Expr::FnDef(def) => {
-                let typ = self.alloc.as_string(def.type_id, &mut Default::default())?;
-                Ok(format!("{}: {}", def.body, typ))
+            if let Some(parent_ni) = self
+                .context_tree
+                .neighbors_directed(ni, petgraph::Direction::Incoming)
+                .collect::<Vec<_>>()
+                .first()
+            {
+                ni = *parent_ni;
+            } else {
+                return Err(anyhow!(
+                    "variable {} not found\ntrace: {:?}",
+                    name,
+                    ctx_trace
+                ));
             }
         }
     }
@@ -115,14 +153,9 @@ impl InterpreterEnv {
 
 impl Display for InterpreterEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "[env]")?;
-        writeln!(f, "type_env:")?;
-        for (k, v) in &self.type_env.id_map {
-            writeln!(f, "{} = #{}", k, v)?;
-        }
-        writeln!(f, "variables:")?;
-        for (_name, expr) in &self.variables {
-            writeln!(f, "{}", self.debug(expr).unwrap())?;
+        writeln!(f, "type_env: {}", self.type_env)?;
+        for context in self.context_tree.node_weights() {
+            writeln!(f, "{}", context)?;
         }
         Ok(())
     }
