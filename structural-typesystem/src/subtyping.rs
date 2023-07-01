@@ -16,6 +16,15 @@ use symbolic_expressions::parser::parse_str;
 pub fn is_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<bool> {
     let any = env.get(&parse_str("any")?)?;
     let (a_ty, b_ty) = (env.alloc.from_id(a)?, env.alloc.from_id(b)?);
+    log::debug!(
+        "{:?} = {}({}) <? {:?} = {}({})",
+        a_ty,
+        env.alloc.as_sexp(a, &mut Default::default())?,
+        a,
+        b_ty,
+        env.alloc.as_sexp(b, &mut Default::default())?,
+        b,
+    );
 
     match (a_ty, b_ty) {
         // any vs ?
@@ -47,13 +56,24 @@ pub fn is_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<bool> {
                 name: b_name,
                 ..
             },
-        ) if a_name == "->" && b_name == "->" => Ok(a_types
-            .iter()
-            .zip(b_types.iter())
-            .map(|(ae, be)| is_subtype(env, *ae, *be))
-            .collect::<Result<Vec<_>>>()?
-            .iter()
-            .all(|e| *e)),
+        ) if a_name == "->" && b_name == "->" => {
+            let all_sub_type = a_types
+                .iter()
+                .zip(b_types.iter())
+                .map(|(ae, be)| is_subtype(env, *ae, *be))
+                .collect::<Result<Vec<_>>>()?
+                .iter()
+                .all(|e| *e);
+            if !all_sub_type {
+                Err(anyhow!(
+                    "not {} < {}",
+                    env.alloc.as_sexp(a, &mut Default::default())?,
+                    env.alloc.as_sexp(b, &mut Default::default())?
+                ))
+            } else {
+                Ok(true)
+            }
+        }
         (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => {
             Err(anyhow!("type variable can't compare"))
         }

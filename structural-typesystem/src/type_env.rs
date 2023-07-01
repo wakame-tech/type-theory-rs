@@ -46,6 +46,11 @@ impl TypeEnv {
 
     pub fn new_type(&mut self, type_expr: &TypeExpr) -> Result<Id> {
         match type_expr {
+            Sexp::String(v) if v.len() == 1 => {
+                let id = self.alloc.new_variable();
+                self.register_type_id(type_expr, id);
+                Ok(id)
+            }
             Sexp::String(s) => {
                 let id = self.alloc.new_primitive(s);
                 self.register_type_id(type_expr, id);
