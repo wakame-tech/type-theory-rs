@@ -8,7 +8,7 @@ use structural_typesystem::{
 };
 use symbolic_expressions::{parser::parse_str, Sexp};
 
-use crate::interpreter_env::InterpreterEnv;
+use crate::{interpreter_env::InterpreterEnv, traits::TypeCheck};
 
 pub fn infer_value_type(type_env: &TypeEnv, value: &Value) -> Result<Id> {
     match &value.raw {
@@ -71,7 +71,7 @@ pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<I
                 return Ok(infer_ty);
             }
         }
-        Expr::MacroApp(..) => todo!(),
+        Expr::MacroApp(macro_app) => macro_app.type_check(env),
     }?;
     log::debug!(
         "infer_type {} :: #{} {}",
