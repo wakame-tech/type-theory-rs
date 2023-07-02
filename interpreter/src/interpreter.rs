@@ -16,22 +16,16 @@ impl Eval for FnDef {
 impl Eval for Let {
     /// (let a int 1)
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        let expr = self.value.eval(env)?;
-        let typ = if let Some(typ) = &self.typ {
-            env.type_env.alloc.from_sexp(typ)?
-        } else {
-            todo!()
-        };
-        env.new_var(&self.name, expr.clone(), typ);
-
+        let value = self.value.eval(env)?;
         // if value has context, move it
         if env.context_map.contains_key(&self.value.to_string()) {
             env.new_context(&self.name);
             env.move_context(&self.value.to_string(), &self.name);
-            println!("move ctx {} -> {}", expr.to_string(), self.name);
+            println!("move ctx {} -> {}", value, self.name);
         }
-
-        Ok(Expr::Variable(self.name.clone()))
+        let (_, expr) = env.get_variable_mut(&self.name)?;
+        *expr = value.clone();
+        Ok(value)
     }
 }
 
@@ -45,7 +39,7 @@ impl Eval for FnApp {
         // get fn body
         let f = match self.0.eval(env)? {
             Expr::Variable(name) => {
-                if let (_, Expr::FnDef(fn_def)) = env.get_variable(&name)? {
+                if let (_, Expr::FnDef(fn_def)) = env.get_variable(&name)?.clone() {
                     env.switch_context(&name);
                     Ok(fn_def)
                 } else {
@@ -104,7 +98,7 @@ impl Eval for Expr {
             Expr::Let(r#let) => r#let.eval(env),
             Expr::FnApp(fnapp) => fnapp.eval(env),
             Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
-            Expr::Variable(var) => Ok(env.get_variable(var)?.1),
+            Expr::Variable(var) => Ok(env.get_variable(var)?.1.clone()),
             Expr::MacroApp(macro_app) => macro_app.eval(env),
         };
         log::debug!("eval@#{} {}", env.current_context.index(), self);

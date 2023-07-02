@@ -7,6 +7,7 @@ use std::{env, fs::File, io::Read};
 use symbolic_expressions::parser::parse_str;
 
 pub mod builtin;
+pub mod infer;
 pub mod interpreter;
 pub mod interpreter_env;
 pub mod traits;
@@ -30,11 +31,29 @@ fn main() -> Result<()> {
 
     let program = sexps.iter().map(into_ast).collect::<Result<Vec<_>>>()?;
     let mut env = InterpreterEnv::default();
-    println!("{}", &env);
     let program = Program(program);
     program.type_check(&mut env)?;
 
     let ret = program.eval(&mut env)?;
     println!("{}", &ret);
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use simple_logger::SimpleLogger;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    pub fn setup() {
+        INIT.call_once(|| {
+            SimpleLogger::new()
+                .without_timestamps()
+                .with_level(log::LevelFilter::Debug)
+                .init()
+                .unwrap();
+            pretty_backtrace::force_setup();
+        });
+    }
 }
