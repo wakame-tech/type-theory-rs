@@ -23,11 +23,16 @@ impl Context {
         self.variables.insert(name.to_string(), (ty_id, expr));
     }
 
-    pub fn get(&self, name: &str) -> Result<(Id, Expr)> {
+    pub fn get_mut(&mut self, name: &str) -> Result<&mut (Id, Expr)> {
+        self.variables
+            .get_mut(name)
+            .ok_or(anyhow!("variable {} not found", name))
+    }
+
+    pub fn get(&self, name: &str) -> Result<&(Id, Expr)> {
         self.variables
             .get(name)
             .ok_or(anyhow!("variable {} not found", name))
-            .cloned()
     }
 }
 
@@ -124,14 +129,14 @@ impl InterpreterEnv {
         ctx.insert(name, ty_id, expr);
     }
 
-    pub fn get_variable(&self, name: &str) -> Result<(Id, Expr)> {
+    fn find_context(&self, name: &str) -> Result<NodeIndex> {
         let mut ni = self.current_context;
         let mut ctx_trace = vec![];
         loop {
             let ctx = &self.context_tree[ni];
             ctx_trace.push(ctx.name.clone());
-            if let Ok(r) = ctx.get(name) {
-                return Ok(r);
+            if ctx.variables.contains_key(name) {
+                return Ok(ni);
             }
             if let Some(parent_ni) = self
                 .context_tree
@@ -148,6 +153,16 @@ impl InterpreterEnv {
                 ));
             }
         }
+    }
+
+    pub fn get_variable(&self, name: &str) -> Result<&(Id, Expr)> {
+        let ni = self.find_context(name)?;
+        self.context_tree[ni].get(name)
+    }
+
+    pub fn get_variable_mut(&mut self, name: &str) -> Result<&mut (Id, Expr)> {
+        let ni = self.find_context(name)?;
+        self.context_tree[ni].get_mut(name)
     }
 }
 

@@ -9,7 +9,7 @@ use symbolic_expressions::Sexp;
 /// [TypeAlloc] is globally unique.
 #[derive(Debug, Clone)]
 pub struct TypeAlloc {
-    pub alloc: Vec<Type>,
+    alloc: Vec<Type>,
 }
 
 impl TypeAlloc {
@@ -20,18 +20,19 @@ impl TypeAlloc {
     /// create a new type variable
     pub fn new_variable(&mut self) -> Id {
         let id = self.alloc.len();
-        self.alloc.push(Type::var(id));
+        log::debug!("TypeAlloc::new_variable #{}", id);
+        self.alloc.push(Type::Variable { id, instance: None });
         id
     }
 
-    /// create a new operator type
-    pub fn new_operator(&mut self, name: &str, types: &Vec<Id>) -> Id {
+    pub fn new_operator(&mut self, name: &str, ids: &Vec<Id>) -> Id {
         let id = self.alloc.len();
         self.alloc.push(Type::Operator {
             id,
             name: name.to_string(),
-            types: types.to_vec(),
+            types: ids.to_vec(),
         });
+        log::debug!("TypeAlloc::new_operator #{} = {} {:?}", id, name, ids);
         id
     }
 
@@ -42,6 +43,7 @@ impl TypeAlloc {
             name: "->".to_string(),
             types: vec![arg, ret],
         };
+        log::debug!("TypeAlloc::new_function #{} = #{} -> #{}", id, arg, ret);
         self.alloc.push(typ);
         id
     }
@@ -68,7 +70,13 @@ impl TypeAlloc {
         self.alloc
             .get(id)
             .cloned()
-            .ok_or(anyhow!("type_id {} not found", id))
+            .ok_or(anyhow!("type_alloc type_id {} not found", id))
+    }
+
+    pub fn from_id_mut(&mut self, id: Id) -> Result<&mut Type> {
+        self.alloc
+            .get_mut(id)
+            .ok_or(anyhow!("type_alloc type_id {} not found", id))
     }
 
     pub fn as_sexp(&self, type_id: Id, issuer: &mut Issuer) -> Result<TypeExpr> {
@@ -120,8 +128,16 @@ impl TypeAlloc {
             .alloc
             .iter()
             .find(|ty| self.as_sexp(ty.id(), &mut Default::default()).unwrap() == *type_sexp)
-            .ok_or(anyhow!("type {} not found", type_sexp))?;
+            .ok_or(anyhow!("type of \"{}\" not found", type_sexp))?;
         Ok(typ.id())
+    }
+
+    pub fn is_generic(&self, id: Id) -> Result<bool> {
+        match self.from_id(id)? {
+            Type::Operator { types, .. } => Ok(types.iter().any(|t| self.is_generic(*t).unwrap())),
+            Type::Variable { .. } => Ok(true),
+            Type::Record { types, .. } => Ok(types.values().any(|t| self.is_generic(*t).unwrap())),
+        }
     }
 }
 
