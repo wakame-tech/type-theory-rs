@@ -25,11 +25,6 @@ pub enum Type {
 }
 
 impl Type {
-    /// create a new type variable
-    pub fn var(id: Id) -> Type {
-        Type::Variable { id, instance: None }
-    }
-
     pub fn id(&self) -> Id {
         match self {
             Type::Variable { id, .. } => *id,

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::fmt::{Debug, Display};
-use structural_typesystem::types::Id;
 use symbolic_expressions::Sexp;
 
 #[derive(Debug, Clone, PartialEq)]

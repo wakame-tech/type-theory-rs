@@ -45,6 +45,9 @@ impl TypeEnv {
     }
 
     pub fn new_type(&mut self, type_expr: &TypeExpr) -> Result<Id> {
+        if let Some(id) = self.id_map.get(&type_expr.to_string()) {
+            return Ok(*id);
+        }
         match type_expr {
             Sexp::String(v) if v.len() == 1 => {
                 let id = self.alloc.new_variable();
@@ -57,8 +60,9 @@ impl TypeEnv {
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == "->" => {
-                let (f, t) = (self.get(&list[1])?, self.get(&list[2])?);
+                let (f, t) = (self.new_type(&list[1])?, self.new_type(&list[2])?);
                 let id = self.alloc.new_function(f, t);
+                self.register_type_id(type_expr, id);
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == "record" => {
@@ -79,7 +83,14 @@ impl TypeEnv {
         }
     }
 
+    pub fn new_type_from_id(&mut self, id: Id) -> Result<()> {
+        let expr = self.alloc.as_sexp(id, &mut Default::default())?;
+        self.register_type_id(&expr, id);
+        Ok(())
+    }
+
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {
+        log::debug!("TypeEnv register #{} :: {}", type_id, expr);
         self.id_map.insert(expr.to_string(), type_id);
         let i = self.tree.add_node(type_id);
         self.index_map.insert(type_id, i);
