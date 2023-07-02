@@ -56,7 +56,12 @@ impl TypeCheck for FnApp {
 
 impl TypeCheck for MacroApp {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        env.type_env.get(&parse_str("any")?)
+        let ret_ty = match self.0.list()?[0].string()?.as_str() {
+            "add!" => "int",
+            "not!" => "bool",
+            _ => panic!(),
+        };
+        env.type_env.get(&parse_str(ret_ty)?)
     }
 }
 

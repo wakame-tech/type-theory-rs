@@ -88,7 +88,11 @@ impl Eval for MacroApp {
                 );
                 Ok(Expr::Literal(Value::new(Sexp::String((a + b).to_string()))))
             }
-            _ => panic!(),
+            "not!" => {
+                let v = values[0].clone().literal()?.raw.s()? == "true";
+                Ok(Expr::Literal(Value::new(Sexp::String((!v).to_string()))))
+            }
+            _ => Err(anyhow!("macro \"{}\" not found", macr)),
         }
     }
 }
