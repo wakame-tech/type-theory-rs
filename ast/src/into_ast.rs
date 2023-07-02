@@ -84,13 +84,15 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref lam) if lam == "lam" => parse_lambda(list),
             Sexp::String(ref lt) if lt == "let" => parse_let(list),
-            _ if list[0].string()?.ends_with('!') => Ok(Expr::MacroApp(MacroApp(Sexp::List(
-                vec![
-                    vec![Sexp::String(list[0].string()?.to_string())],
-                    list[1..].to_vec(),
-                ]
-                .concat(),
-            )))),
+            _ if list[0].is_string() && list[0].string()?.ends_with('!') => {
+                Ok(Expr::MacroApp(MacroApp(Sexp::List(
+                    vec![
+                        vec![Sexp::String(list[0].string()?.to_string())],
+                        list[1..].to_vec(),
+                    ]
+                    .concat(),
+                ))))
+            }
             _ if list.len() == 2 => parse_apply(&list[0], &list[1]),
             _ => Err(anyhow::anyhow!("illegal operands")),
         },
