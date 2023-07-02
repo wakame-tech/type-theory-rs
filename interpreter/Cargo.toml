@@ -10,9 +10,9 @@ anyhow = { version = "1", features = ["backtrace"] }
 log = "0.4.17"
 symbolic_expressions = "5.0.3"
 structural-typesystem = { path = "../structural-typesystem" }
-hindley-milner = { path = "../hindley-milner" }
 ast = { path = "../ast" }
 rand = "0.8.5"
 petgraph = "0.6.3"
 ptree = "0.4.0"
 simple_logger = "4.2.0"
+pretty_backtrace = "0.1.2"
