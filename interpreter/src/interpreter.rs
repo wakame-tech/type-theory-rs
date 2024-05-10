@@ -4,7 +4,6 @@ use ast::{
     ast::{Expr, FnApp, FnDef, Let, MacroApp, Program, Value},
     into_ast::into_ast,
 };
-use symbolic_expressions::Sexp;
 
 impl Eval for FnDef {
     fn eval(&self, _env: &mut InterpreterEnv) -> Result<Expr> {
@@ -79,17 +78,16 @@ impl Eval for MacroApp {
             .map(|expr| into_ast(expr).and_then(|e| e.eval(env)))
             .collect::<Result<Vec<_>>>()?;
         match macr.as_str() {
-            "add!" => {
-                let (a, b) = (
-                    values[0].clone().literal()?.raw.i()?,
-                    values[1].clone().literal()?.raw.i()?,
-                );
-                Ok(Expr::Literal(Value::new(Sexp::String((a + b).to_string()))))
-            }
-            "not!" => {
-                let v = values[0].clone().literal()?.raw.s()? == "true";
-                Ok(Expr::Literal(Value::new(Sexp::String((!v).to_string()))))
-            }
+            "add!" => match (values[0].clone().literal()?, values[1].clone().literal()?) {
+                (Value::Number(a), Value::Number(b)) => {
+                    return Ok(Expr::Literal(Value::Number(a + b)))
+                }
+                _ => return Err(anyhow!("add! only accept number")),
+            },
+            "not!" => match values[0].clone().literal()? {
+                Value::Bool(v) => return Ok(Expr::Literal(Value::Bool(!v))),
+                _ => return Err(anyhow!("not! only accept bool")),
+            },
             _ => Err(anyhow!("macro \"{}\" not found", macr)),
         }
     }

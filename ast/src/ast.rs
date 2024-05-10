@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::fmt::{Debug, Display};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+};
 use symbolic_expressions::Sexp;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,19 +87,21 @@ impl Display for Let {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Value {
-    pub raw: Sexp,
-}
-
-impl Value {
-    pub fn new(raw: Sexp) -> Self {
-        Value { raw }
-    }
+pub enum Value {
+    Nil,
+    Bool(bool),
+    Number(i64),
+    Record(HashMap<String, Expr>),
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.raw)
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Record(record) => write!(f, "{:?}", record),
+        }
     }
 }
 

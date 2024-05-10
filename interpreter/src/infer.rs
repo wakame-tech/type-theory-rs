@@ -1,7 +1,7 @@
 use crate::{interpreter_env::InterpreterEnv, traits::TypeCheck};
 use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use structural_typesystem::{
     type_alloc::TypeAlloc,
     type_env::TypeEnv,
@@ -9,18 +9,32 @@ use structural_typesystem::{
 };
 use symbolic_expressions::{parser::parse_str, Sexp};
 
-pub fn infer_value_type(type_env: &TypeEnv, value: &Value) -> Result<Id> {
-    match &value.raw {
-        Sexp::String(lit) if lit.parse::<usize>().is_ok() => type_env.get(&parse_str("int")?),
-        Sexp::String(lit) if lit == "true" || lit == "false" => type_env.get(&parse_str("bool")?),
-        sexp => Err(anyhow::anyhow!("unknown literal {}", sexp)),
+pub fn infer_value_type(
+    env: &mut InterpreterEnv,
+    value: &Value,
+    non_generic: &HashSet<Id>,
+) -> Result<Id> {
+    match &value {
+        Value::Nil => env.type_env.get(&parse_str("int")?),
+        Value::Bool(_) => env.type_env.get(&parse_str("bool")?),
+        Value::Number(_) => env.type_env.get(&parse_str("int")?),
+        Value::Record(record) => {
+            let record_type = record
+                .into_iter()
+                .map(|(k, v)| {
+                    let ty_id = infer_type(env, &v, non_generic)?;
+                    Ok((k.to_string(), ty_id))
+                })
+                .collect::<Result<BTreeMap<_, _>>>()?;
+            Ok(env.type_env.alloc.new_record(record_type))
+        }
     }
 }
 
 pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<Id>) -> Result<Id> {
     log::debug!("infer_type: {}", expr);
     let ret = match &expr {
-        Expr::Literal(value) => infer_value_type(&env.type_env, value),
+        Expr::Literal(value) => infer_value_type(env, value, non_generic),
         Expr::Variable(name) => {
             let (id, _) = env.get_variable(name)?.clone();
             let ng = non_generic.iter().cloned().collect::<Vec<_>>();

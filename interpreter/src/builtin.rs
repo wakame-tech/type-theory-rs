@@ -5,11 +5,10 @@ use ast::{
     into_ast::parse_parameter,
 };
 use structural_typesystem::type_env::TypeEnv;
-use symbolic_expressions::{parser::parse_str, Sexp};
+use symbolic_expressions::parser::parse_str;
 
 pub fn main_context(type_env: &mut TypeEnv) -> Result<Context> {
     let mut context = Context::new("main");
-    let empty = Expr::Literal(Value::new(Sexp::Empty));
 
     let not_id = type_env.new_type(&parse_str("(-> bool bool)")?)?;
     context.insert(
@@ -17,7 +16,7 @@ pub fn main_context(type_env: &mut TypeEnv) -> Result<Context> {
         not_id,
         Expr::FnDef(FnDef::new(
             parse_parameter(&parse_str("(v : bool)")?)?,
-            Box::new(empty),
+            Box::new(Expr::Literal(Value::Nil)),
         )),
     );
 

@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{
     infer::{infer_type, infer_value_type},
     interpreter_env::InterpreterEnv,
@@ -7,6 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let, MacroApp, Program};
+use std::collections::HashSet;
 use structural_typesystem::{
     subtyping::is_subtype,
     types::{Id, Type},
@@ -57,7 +56,7 @@ impl TypeCheck for FnApp {
         };
         anyhow::ensure!(name == "->");
 
-        let (arg_ty, ret_ty) = (types[0], types[1]);
+        let (arg_ty, _ret_ty) = (types[0], types[1]);
         let param_ty = self.1.type_check(env)?;
 
         // if `arg_ty` is generic, skip subtype check
@@ -99,7 +98,7 @@ impl TypeCheck for MacroApp {
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         let ret = match self {
-            Expr::Literal(value) => infer_value_type(&env.type_env, value),
+            Expr::Literal(value) => infer_value_type(env, value, &mut Default::default()),
             Expr::Variable(name) => Ok(env.get_variable(name)?.0),
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
@@ -126,4 +125,10 @@ impl TypeCheck for Program {
             .unwrap();
         Ok(id)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn r#let() {}
 }
