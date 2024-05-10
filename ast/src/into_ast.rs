@@ -41,23 +41,22 @@ pub fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
     Ok(Expr::FnDef(FnDef::new(param, body)))
 }
 
-///
-/// - with type annotation: `(let a int 1)`
-/// - without type annotation: `(let a 1)`
 pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
     let let_node = match list.len() {
+        // without type annotation: `(let a 1)`
         3 => {
             let (name, val) = (list[1].string()?, &list[2]);
             let val = into_ast(val)?;
             Let::new(name.to_string(), None, Box::new(val))
         }
-        4 => {
-            let (name, typ, val) = (list[1].string()?, &list[2], &list[3]);
+        // with type annotation: `(let a : int 1)`
+        5 if list[2].string().ok() == Some(&":".to_string()) => {
+            let (name, typ, val) = (list[1].string()?, &list[3], &list[4]);
             log::debug!("{} {} {}", name, typ, val);
             let val = into_ast(val)?;
             Let::new(name.to_string(), Some(typ.clone()), Box::new(val))
         }
-        _ => panic!("let/3 nor let/4"),
+        _ => panic!("let/2 nor let/4"),
     };
     Ok(Expr::Let(let_node))
 }
@@ -148,7 +147,7 @@ mod tests {
 
     #[test]
     fn parameter() -> Result<()> {
-        let param = parse_parameter(&parse_str("(: a int)")?)?;
+        let param = parse_parameter(&parse_str("(a : int)")?)?;
         assert_eq!(
             param,
             Parameter::new("a".to_string(), Sexp::String("int".to_string()))
@@ -160,7 +159,7 @@ mod tests {
     fn let_expr() -> Result<()> {
         let value = make_value("1")?;
         should_be_ast(
-            "(let x (: int) 1)",
+            "(let x : int 1)",
             &Expr::Let(Let::new(
                 "x".to_string(),
                 Some(Sexp::String("int".to_string())),
@@ -176,7 +175,7 @@ mod tests {
             "(let x 1)",
             &Expr::Let(Let::new(
                 "x".to_string(),
-                Some(Sexp::String("int".to_string())),
+                None,
                 Box::new(Expr::Literal(value)),
             )),
         )
@@ -188,7 +187,7 @@ mod tests {
             Parameter::new("x".to_string(), Sexp::String("int".to_string())),
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam (x (: int)) x)", &fn_def)
+        should_be_ast("(lam (x : int) x)", &fn_def)
     }
 
     #[test]
@@ -197,7 +196,7 @@ mod tests {
             Parameter::new("x".to_string(), Sexp::String("int".to_string())),
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam (x (: int)) x)", &fn_def)
+        should_be_ast("(lam (x : int) x)", &fn_def)
     }
 
     #[test]
