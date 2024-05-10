@@ -110,8 +110,8 @@ mod test {
     #[test]
     fn test_type_cmp_2() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
-        let any_int = type_env.get(&parse_str("(-> any int)")?)?;
+        let int_int = type_env.new_type(&parse_str("(-> int int)")?)?;
+        let any_int = type_env.new_type(&parse_str("(-> any int)")?)?;
         assert!(
             is_subtype(&mut type_env, int_int, any_int)?,
             "int -> int <= int -> any"
@@ -122,8 +122,8 @@ mod test {
     #[test]
     fn test_type_cmp_3() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let any = type_env.get(&parse_str("any")?)?;
-        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
+        let any = type_env.new_type(&parse_str("any")?)?;
+        let int_int = type_env.new_type(&parse_str("(-> int int)")?)?;
         assert!(
             is_subtype(&mut type_env, int_int, any)?,
             "int -> int <= any"
@@ -134,8 +134,8 @@ mod test {
     #[test]
     fn test_type_cmp_record() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let rec_a = type_env.get(&parse_str("(record (a int))")?)?;
-        let rec_b = type_env.get(&parse_str("(record (a any) (b int))")?)?;
+        let rec_a = type_env.new_type(&parse_str("(record (a int))")?)?;
+        let rec_b = type_env.new_type(&parse_str("(record (a any) (b int))")?)?;
         assert!(
             is_subtype(&mut type_env, rec_a, rec_b)?,
             "{{ a: int }} <= {{ a: any, b: int }}"

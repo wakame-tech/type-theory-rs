@@ -153,8 +153,8 @@ mod tests {
 
     #[test]
     fn parse_fn_type() -> Result<()> {
-        let type_env = TypeEnv::default();
-        let int_int = type_env.get(&parse_str("(-> int int)")?)?;
+        let mut type_env = TypeEnv::default();
+        let int_int = type_env.new_type(&parse_str("(-> int int)")?)?;
         assert_eq!(
             type_env.alloc.as_sexp(int_int, &mut Default::default())?,
             parse_str("(-> int int)")?,
@@ -164,8 +164,8 @@ mod tests {
 
     #[test]
     fn parse_record_type() -> Result<()> {
-        let type_env = TypeEnv::default();
-        let rec = type_env.get(&parse_str("(record (a int))")?)?;
+        let mut type_env = TypeEnv::default();
+        let rec = type_env.new_type(&parse_str("(record (a int))")?)?;
         assert_eq!(
             type_env.alloc.as_sexp(rec, &mut Default::default())?,
             parse_str("(record (a int))")?,
