@@ -8,9 +8,21 @@ use ast::ast::{Expr, FnApp, FnDef, Let, MacroApp, Program};
 use std::collections::HashSet;
 use structural_typesystem::{
     subtyping::is_subtype,
+    type_env::TypeEnv,
     types::{Id, Type},
 };
 use symbolic_expressions::parser::parse_str;
+
+fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
+    if !is_subtype(env, a, b)? {
+        return Err(anyhow::anyhow!(
+            "{} is not subtype of {}",
+            env.alloc.as_sexp(a, &mut Default::default())?,
+            env.alloc.as_sexp(b, &mut Default::default())?
+        ));
+    }
+    Ok(())
+}
 
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
@@ -34,10 +46,10 @@ impl TypeCheck for FnDef {
 impl TypeCheck for Let {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         let value_ty = self.value.type_check(env)?;
-        let let_ty = if let Some(typ) = &self.typ {
-            let ty_id = env.type_env.new_type(typ)?;
-            is_subtype(&mut env.type_env, value_ty, ty_id)?;
-            ty_id
+        let let_ty = if let Some(decl_ty) = &self.typ {
+            let decl_ty = env.type_env.new_type(decl_ty)?;
+            ensure_subtype(&mut env.type_env, value_ty, decl_ty)?;
+            decl_ty
         } else {
             infer_type(env, &self.value, &mut HashSet::new())?
         };
@@ -50,8 +62,8 @@ impl TypeCheck for FnApp {
     /// f :: a -> b
     /// v :: a
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        let f_type = self.0.type_check(env)?;
-        let Type::Operator { name, types, .. } = env.type_env.alloc.from_id(f_type)? else {
+        let f_ty = self.0.type_check(env)?;
+        let Type::Operator { name, types, .. } = env.type_env.alloc.from_id(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
         anyhow::ensure!(name == "->");
@@ -61,7 +73,7 @@ impl TypeCheck for FnApp {
 
         // if `arg_ty` is generic, skip subtype check
         if !env.type_env.alloc.is_generic(arg_ty)? {
-            is_subtype(&mut env.type_env, param_ty, arg_ty)?;
+            ensure_subtype(&mut env.type_env, param_ty, arg_ty)?;
         }
 
         // TODO: clone `TypeEnv` instead of `InterpreterEnv` when infer type of generic variables
@@ -70,16 +82,6 @@ impl TypeCheck for FnApp {
             &Expr::FnApp(self.clone()),
             &mut HashSet::new(),
         )?;
-        log::debug!(
-            "type_check FnApp {} ret_type = {}",
-            env.type_env
-                .alloc
-                .as_sexp(f_type, &mut Default::default())?,
-            env.type_env
-                .alloc
-                .as_sexp(ret_ty, &mut Default::default())?,
-        );
-
         Ok(ret_ty)
     }
 }
@@ -129,6 +131,36 @@ impl TypeCheck for Program {
 
 #[cfg(test)]
 mod tests {
+    use crate::{tests::setup, traits::TypeCheck};
+    use anyhow::Result;
+    use ast::into_ast::into_ast;
+    use symbolic_expressions::parser::parse_str;
+
     #[test]
-    fn r#let() {}
+    fn r#let() -> Result<()> {
+        setup();
+        for (expected, error) in [
+            ("(let x : (record (a int)) (record (a 3)))", None),
+            (
+                "(let x : (record (a int) (b bool)) (record (b true)))",
+                None,
+            ),
+            (
+                "(let x : (record (a bool) (b int)) (record (b 1) (a 2)))",
+                Some(
+                    "(record (a int) (b int)) is not subtype of (record (a bool) (b int))"
+                        .to_string(),
+                ),
+            ),
+        ] {
+            let ast = into_ast(&parse_str(expected)?)?;
+            assert_eq!(
+                ast.type_check(&mut Default::default())
+                    .err()
+                    .map(|e| e.to_string()),
+                error
+            );
+        }
+        Ok(())
+    }
 }

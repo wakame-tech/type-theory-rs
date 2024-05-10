@@ -1,9 +1,6 @@
 use crate::interpreter_env::Context;
 use anyhow::Result;
-use ast::{
-    ast::{Expr, FnDef, Value},
-    into_ast::parse_parameter,
-};
+use ast::ast::{Expr, FnDef, Parameter, Value};
 use structural_typesystem::type_env::TypeEnv;
 use symbolic_expressions::parser::parse_str;
 
@@ -15,7 +12,7 @@ pub fn main_context(type_env: &mut TypeEnv) -> Result<Context> {
         "not",
         not_id,
         Expr::FnDef(FnDef::new(
-            parse_parameter(&parse_str("(v : bool)")?)?,
+            Parameter::new("v".to_string(), Some(parse_str("bool")?)),
             Box::new(Expr::Literal(Value::Nil)),
         )),
     );

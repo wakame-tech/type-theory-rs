@@ -1,15 +1,58 @@
 use crate::ast::{Expr, FnApp, FnDef, Let, MacroApp, Parameter, Value};
 use anyhow::Result;
 use std::collections::HashMap;
-use structural_typesystem::{type_alloc::TypeAlloc, types::Id};
 use symbolic_expressions::Sexp;
 
-fn is_number(s: &str) -> bool {
-    s.chars().all(|c| c.is_numeric())
+fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
+    match sexp {
+        // without type annotation: `a`
+        Sexp::String(arg) => Ok(Parameter::new(arg.to_string(), None)),
+        // with type annotation: `(a : int)`
+        Sexp::List(list) if list.len() == 3 && list[1].string().ok() == Some(&":".to_string()) => {
+            let name = list[0].string()?;
+            let typ = list[2].clone();
+            Ok(Parameter::new(name.to_string(), Some(typ)))
+        }
+        _ => Err(anyhow::anyhow!(
+            "parameter must be a string or a list. but {}",
+            sexp
+        )),
+    }
 }
 
-fn is_bool(s: &str) -> bool {
-    s == "true" || s == "false"
+/// (lam (x : int) x)
+fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
+    let param = parse_parameter(&list[1])?;
+    let body = Box::new(into_ast(&list[2])?);
+    Ok(Expr::FnDef(FnDef::new(param, body)))
+}
+
+fn parse_let(sexp: &Sexp) -> Result<Expr> {
+    let list = sexp.list()?;
+    match list.len() {
+        // without type annotation: `(let a 1)`
+        3 => Ok(Expr::Let(Let::new(
+            list[1].string()?.to_string(),
+            None,
+            Box::new(into_ast(&list[2])?),
+        ))),
+        // with type annotation: `(let a : int 1)`
+        5 if list[2].string().ok() == Some(&":".to_string()) => Ok(Expr::Let(Let::new(
+            list[1].string()?.to_string(),
+            Some(list[3].clone()),
+            Box::new(into_ast(&list[4])?),
+        ))),
+        _ => Err(anyhow::anyhow!(
+            "let must have 2 or 3 operands. but {}",
+            sexp
+        )),
+    }
+}
+
+/// (f g h) -> ((f g) h)
+fn parse_apply(f: &Sexp, v: &Sexp) -> Result<Expr> {
+    let (f, v) = (into_ast(f)?, into_ast(v)?);
+    Ok(Expr::FnApp(FnApp::new(f, v)))
 }
 
 fn parse_record(entries: &[Sexp]) -> Result<Value> {
@@ -23,81 +66,15 @@ fn parse_record(entries: &[Sexp]) -> Result<Value> {
     Ok(Value::Record(res))
 }
 
-pub fn parse_type(alloc: &mut TypeAlloc, type_sexp: &Sexp) -> Result<Id> {
-    let Ok(list) = type_sexp.list() else {
-        return Err(anyhow::anyhow!("type annotation expected"));
-    };
-    if list[0].string()? != ":" {
-        return Err(anyhow::anyhow!("type annotation expected"));
-    }
-    alloc.from_sexp(&list[1])
-}
-
-/// parse (x : int)
-pub fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
-    match sexp {
-        Sexp::String(arg) => Ok(Parameter::new(arg.to_string(), None)),
-        Sexp::List(list) if list[1].string().ok() == Some(&":".to_string()) => {
-            let name = list[0].string()?;
-            let typ = list[2].clone();
-            Ok(Parameter::new(name.to_string(), Some(typ)))
-        }
-        _ => Err(anyhow::anyhow!(
-            "parameter must be a string or a list. but {}",
-            sexp
-        )),
-    }
-}
-
-/// (lam (x : int) x)
-pub fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
-    let param = parse_parameter(&list[1])?;
-    let body = Box::new(into_ast(&list[2])?);
-    Ok(Expr::FnDef(FnDef::new(param, body)))
-}
-
-pub fn parse_let(list: &[Sexp]) -> Result<Expr> {
-    let let_node = match list.len() {
-        // without type annotation: `(let a 1)`
-        3 => {
-            let (name, val) = (list[1].string()?, &list[2]);
-            let val = into_ast(val)?;
-            Let::new(name.to_string(), None, Box::new(val))
-        }
-        // with type annotation: `(let a : int 1)`
-        5 if list[2].string().ok() == Some(&":".to_string()) => {
-            let (name, typ, val) = (list[1].string()?, &list[3], &list[4]);
-            log::debug!("{} {} {}", name, typ, val);
-            let val = into_ast(val)?;
-            Let::new(name.to_string(), Some(typ.clone()), Box::new(val))
-        }
-        _ => panic!("let/2 nor let/4"),
-    };
-    Ok(Expr::Let(let_node))
-}
-
-pub fn reduce<T, F>(a: Result<T>, b: Result<T>, f: F) -> Result<T>
-where
-    F: FnOnce(T, T) -> T,
-{
-    match (a, b) {
-        (Ok(l), Ok(r)) => Ok(f(l, r)),
-        (Ok(_), Err(e)) | (Err(e), Ok(_)) => Err(e),
-        (Err(e1), Err(e2)) => Err(anyhow::anyhow!("{}, {}", e1, e2)),
-    }
-}
-
-/// (f g h) -> ((f g) h)
-pub fn parse_apply(f: &Sexp, v: &Sexp) -> Result<Expr> {
-    let (f, v) = (into_ast(f)?, into_ast(v)?);
-    Ok(Expr::FnApp(FnApp::new(f, v)))
+fn is_number(s: &str) -> bool {
+    s.chars().all(|c| c.is_numeric())
 }
 
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
     match sexp {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref lam) if lam == "lam" => parse_lambda(list),
-            Sexp::String(ref lt) if lt == "let" => parse_let(list),
+            Sexp::String(ref lt) if lt == "let" => parse_let(sexp),
             _ if list[0].is_string() && list[0].string()? == &"record".to_string() => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
@@ -116,7 +93,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         Sexp::String(lit) => match lit.as_str() {
             "nil" => Ok(Expr::Literal(Value::Nil)),
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
-            _ if is_bool(lit) => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
+            "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
             _ => Ok(Expr::Variable(lit.to_string())),
         },
         _ => panic!("invalid sexp"),

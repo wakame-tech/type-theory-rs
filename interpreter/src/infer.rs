@@ -251,9 +251,12 @@ mod test {
     }
 
     #[test]
-    fn test_var() -> Result<()> {
+    fn test_literal() -> Result<()> {
         let mut env = InterpreterEnv::default();
-        should_infer(&mut env, "true", "bool")
+        should_infer(&mut env, "true", "bool")?;
+        should_infer(&mut env, "1", "int")?;
+        should_infer(&mut env, "(record (a 1))", "(record (a int))")?;
+        Ok(())
     }
 
     #[test]
