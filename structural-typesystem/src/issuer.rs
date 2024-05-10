@@ -2,9 +2,9 @@ use crate::types::Id;
 use std::collections::HashMap;
 
 pub struct Issuer {
-    pub value: u8,
-    pub set: HashMap<Id, String>,
-    pub count: usize,
+    value: u8,
+    set: HashMap<Id, String>,
+    pub nest: usize,
 }
 
 impl Default for Issuer {
@@ -12,7 +12,7 @@ impl Default for Issuer {
         Issuer {
             value: b'a',
             set: HashMap::new(),
-            count: 0,
+            nest: 0,
         }
     }
 }

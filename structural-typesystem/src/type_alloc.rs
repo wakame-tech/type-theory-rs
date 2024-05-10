@@ -83,8 +83,8 @@ impl TypeAlloc {
     }
 
     pub fn as_sexp(&self, type_id: Id, issuer: &mut Issuer) -> Result<TypeExpr> {
-        issuer.count += 1;
-        if issuer.count > 10 {
+        issuer.nest += 1;
+        if issuer.nest > 10 {
             return Err(anyhow!("cyclic type"));
         }
         match self.from_id(type_id)? {

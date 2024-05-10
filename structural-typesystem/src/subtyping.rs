@@ -3,10 +3,30 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::{anyhow, Result};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use symbolic_expressions::parser::parse_str;
 
 impl TypeEnv {
+    fn is_subtype_vec(&mut self, a: Vec<Id>, b: Vec<Id>) -> Result<bool> {
+        Ok(a.len() == b.len()
+            && a.iter()
+                .zip(b.iter())
+                .map(|(ae, be)| self.is_subtype(*ae, *be))
+                .collect::<Result<Vec<_>>>()?
+                .iter()
+                .all(|e| *e))
+    }
+
+    fn is_subtype_map(&mut self, a: BTreeMap<String, Id>, b: BTreeMap<String, Id>) -> Result<bool> {
+        let a_keys = a.keys().collect::<HashSet<_>>();
+        let b_keys = b.keys().collect::<HashSet<_>>();
+        Ok(a_keys.is_subset(&b_keys)
+            && a_keys.into_iter().all(|k| {
+                self.is_subtype(*a.get(k).unwrap(), *b.get(k).unwrap())
+                    .unwrap_or(false)
+            }))
+    }
+
     /// subtyping order for [TypeExpr]
     pub fn is_subtype(&mut self, a: Id, b: Id) -> Result<bool> {
         let any = self.get(&parse_str("any")?)?;
@@ -49,36 +69,13 @@ impl TypeEnv {
                     name: b_name,
                     ..
                 },
-            ) if a_name == "->" && b_name == "->" => {
-                let all_sub_type = a_types
-                    .iter()
-                    .zip(b_types.iter())
-                    .map(|(ae, be)| self.is_subtype(*ae, *be))
-                    .collect::<Result<Vec<_>>>()?
-                    .iter()
-                    .all(|e| *e);
-                if !all_sub_type {
-                    Err(anyhow!(
-                        "not {} < {}",
-                        self.alloc.as_sexp(a, &mut Default::default())?,
-                        self.alloc.as_sexp(b, &mut Default::default())?
-                    ))
-                } else {
-                    Ok(true)
-                }
+            ) if a_name == b_name => self.is_subtype_vec(a_types.clone(), b_types.clone()),
+            // record types
+            (Type::Record { types: a_types, .. }, Type::Record { types: b_types, .. }) => {
+                self.is_subtype_map(a_types, b_types)
             }
             (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => {
                 Err(anyhow!("type variable can't compare"))
-            }
-            // record types
-            (Type::Record { types: a_types, .. }, Type::Record { types: b_types, .. }) => {
-                let a_keys = a_types.keys().collect::<HashSet<_>>();
-                let b_keys = b_types.keys().collect::<HashSet<_>>();
-                Ok(a_keys.is_subset(&b_keys)
-                    && a_keys.into_iter().all(|k| {
-                        self.is_subtype(*a_types.get(k).unwrap(), *b_types.get(k).unwrap())
-                            .unwrap_or(false)
-                    }))
             }
             _ => Ok(false),
         }

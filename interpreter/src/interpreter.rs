@@ -1,4 +1,5 @@
-use crate::{infer::infer_type, interpreter_env::InterpreterEnv, traits::Eval};
+use crate::traits::InferType;
+use crate::{interpreter_env::InterpreterEnv, traits::Eval};
 use anyhow::{anyhow, Ok, Result};
 use ast::{
     ast::{Expr, FnApp, FnDef, Let, MacroApp, Program, Value},
@@ -52,7 +53,7 @@ impl Eval for FnApp {
         let param_ty = if let Some(arg_ty) = &f.arg.typ {
             env.type_env.get(arg_ty)?
         } else {
-            infer_type(env, &self.1, &mut Default::default())?
+            self.1.infer_type(env, &mut Default::default())?
         };
 
         // scope
@@ -79,9 +80,7 @@ impl Eval for MacroApp {
             .collect::<Result<Vec<_>>>()?;
         match macr.as_str() {
             "add!" => match (values[0].clone().literal()?, values[1].clone().literal()?) {
-                (Value::Number(a), Value::Number(b)) => {
-                    Ok(Expr::Literal(Value::Number(a + b)))
-                }
+                (Value::Number(a), Value::Number(b)) => Ok(Expr::Literal(Value::Number(a + b))),
                 _ => Err(anyhow!("add! only accept number")),
             },
             "not!" => match values[0].clone().literal()? {

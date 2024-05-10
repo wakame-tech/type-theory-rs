@@ -6,9 +6,12 @@ use symbolic_expressions::Sexp;
 pub type Id = usize;
 pub type TypeExpr = Sexp;
 
+pub const RECORD_TYPE_KEYWORD: &'static str = "record";
+pub const FN_TYPE_KEYWORD: &'static str = "->";
+
 pub fn record_type(alloc: &TypeAlloc, types: BTreeMap<String, Id>) -> Result<TypeExpr> {
     Ok(Sexp::List(
-        vec![Ok(Sexp::String("record".to_string()))]
+        vec![Ok(Sexp::String(RECORD_TYPE_KEYWORD.to_string()))]
             .into_iter()
             .chain(types.into_iter().map(|(k, v)| {
                 let ty = alloc.as_sexp(v, &mut Default::default())?;
@@ -18,15 +21,21 @@ pub fn record_type(alloc: &TypeAlloc, types: BTreeMap<String, Id>) -> Result<Typ
     ))
 }
 
+pub fn fn_type(alloc: &TypeAlloc, arg: Id, ret: Id) -> Result<TypeExpr> {
+    Ok(Sexp::List(vec![
+        Sexp::String(FN_TYPE_KEYWORD.to_string()),
+        alloc.as_sexp(arg, &mut Default::default())?,
+        alloc.as_sexp(ret, &mut Default::default())?,
+    ]))
+}
+
 #[derive(Debug, Clone, Hash)]
 pub enum Type {
     Variable {
         id: Id,
         instance: Option<Id>,
     },
-    /// - function type "->"
-    /// - apply type "app"
-    /// - tuple type ","
+    /// function type "->"
     Operator {
         id: Id,
         name: String,

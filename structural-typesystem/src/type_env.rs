@@ -1,6 +1,6 @@
 use crate::{
     type_alloc::TypeAlloc,
-    types::{Id, TypeExpr},
+    types::{Id, TypeExpr, FN_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use petgraph::prelude::*;
@@ -71,13 +71,13 @@ impl TypeEnv {
                 self.register_type_id(type_expr, id);
                 Ok(id)
             }
-            Sexp::List(list) if list[0].string()? == "->" => {
+            Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
                 let (f, t) = (self.new_type(&list[1])?, self.new_type(&list[2])?);
                 let id = self.alloc.new_function(f, t);
                 self.register_type_id(type_expr, id);
                 Ok(id)
             }
-            Sexp::List(list) if list[0].string()? == "record" => {
+            Sexp::List(list) if list[0].string()? == RECORD_TYPE_KEYWORD => {
                 let entries = list[1..]
                     .iter()
                     .map(|s| -> Result<_> {

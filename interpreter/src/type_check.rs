@@ -1,16 +1,14 @@
 use crate::{
-    infer::{infer_type, infer_value_type},
     interpreter_env::InterpreterEnv,
-    traits::TypeCheck,
+    traits::{InferType, TypeCheck},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, MacroApp, Program};
+use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 use std::collections::HashSet;
 use structural_typesystem::{
     type_env::TypeEnv,
     types::{Id, Type},
 };
-use symbolic_expressions::parser::parse_str;
 
 fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
     if !env.is_subtype(a, b)? {
@@ -26,7 +24,7 @@ fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         self.body.type_check(env)?;
-        infer_type(env, &Expr::FnDef(self.clone()), &mut HashSet::new())
+        self.infer_type(env, &mut HashSet::new())
     }
 }
 
@@ -38,7 +36,7 @@ impl TypeCheck for Let {
             ensure_subtype(&mut env.type_env, value_ty, decl_ty)?;
             decl_ty
         } else {
-            infer_type(env, &self.value, &mut HashSet::new())?
+            self.value.infer_type(env, &mut HashSet::new())?
         };
         env.new_var(&self.name, *self.value.clone(), let_ty);
         Ok(let_ty)
@@ -66,26 +64,15 @@ impl TypeCheck for FnApp {
     }
 }
 
-impl TypeCheck for MacroApp {
-    fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        let ret_ty = match self.0.list()?[0].string()?.as_str() {
-            "add!" => "int",
-            "not!" => "bool",
-            _ => panic!(),
-        };
-        env.type_env.get(&parse_str(ret_ty)?)
-    }
-}
-
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         let ret = match self {
-            Expr::Literal(value) => infer_value_type(env, value, &mut Default::default()),
+            Expr::Literal(value) => value.infer_type(env, &mut Default::default()),
             Expr::Variable(name) => Ok(env.get_variable(name)?.0),
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
-            Expr::MacroApp(macro_app) => macro_app.type_check(env),
+            Expr::MacroApp(macro_app) => macro_app.infer_type(env, &mut Default::default()),
         }?;
         log::debug!("type_check {} :: {}", self, env.type_env.type_name(ret)?);
         Ok(ret)

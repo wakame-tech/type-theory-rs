@@ -3,6 +3,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
 
+pub const LET_KEYWORD: &'static str = "let";
+pub const LAMBDA_KEYWORD: &'static str = "lam";
 pub const RECORD_KEYWORD: &'static str = "record";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
@@ -75,8 +77,8 @@ fn is_number(s: &str) -> bool {
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
     match sexp {
         Sexp::List(list) => match list[0] {
-            Sexp::String(ref lam) if lam == "lam" => parse_lambda(list),
-            Sexp::String(ref lt) if lt == "let" => parse_let(sexp),
+            Sexp::String(ref lam) if lam == LAMBDA_KEYWORD => parse_lambda(list),
+            Sexp::String(ref lt) if lt == LET_KEYWORD => parse_let(sexp),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
