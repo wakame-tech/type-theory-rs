@@ -57,7 +57,7 @@ impl FnDef {
 
 impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) -> {}", self.arg.to_string(), self.body)
+        write!(f, "({}) -> {}", self.arg, self.body)
     }
 }
 

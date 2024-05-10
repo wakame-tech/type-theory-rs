@@ -80,10 +80,8 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             }
             _ if list[0].is_string() && list[0].string()?.ends_with('!') => {
                 Ok(Expr::MacroApp(MacroApp(Sexp::List(
-                    vec![
-                        vec![Sexp::String(list[0].string()?.to_string())],
-                        list[1..].to_vec(),
-                    ]
+                    [vec![Sexp::String(list[0].string()?.to_string())],
+                        list[1..].to_vec()]
                     .concat(),
                 ))))
             }

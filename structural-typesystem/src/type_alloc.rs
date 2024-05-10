@@ -12,6 +12,12 @@ pub struct TypeAlloc {
     alloc: Vec<Type>,
 }
 
+impl Default for TypeAlloc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TypeAlloc {
     pub fn new() -> Self {
         Self { alloc: vec![] }
@@ -111,16 +117,14 @@ impl TypeAlloc {
                 }
             }
             Type::Record { types, .. } => Ok(Sexp::List(
-                vec![
-                    vec![Sexp::String("record".to_string())],
+                [vec![Sexp::String("record".to_string())],
                     types
                         .iter()
                         .map(|(k, v)| {
                             self.as_sexp(*v, &mut Default::default())
                                 .map(|t| Sexp::List(vec![Sexp::String(k.to_string()), t]))
                         })
-                        .collect::<Result<Vec<_>>>()?,
-                ]
+                        .collect::<Result<Vec<_>>>()?]
                 .concat(),
             )),
         }

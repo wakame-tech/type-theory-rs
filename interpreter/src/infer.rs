@@ -20,9 +20,9 @@ pub fn infer_value_type(
         Value::Number(_) => env.type_env.get(&parse_str("int")?),
         Value::Record(record) => {
             let record_type = record
-                .into_iter()
+                .iter()
                 .map(|(k, v)| {
-                    let ty_id = infer_type(env, &v, non_generic)?;
+                    let ty_id = infer_type(env, v, non_generic)?;
                     Ok((k.to_string(), ty_id))
                 })
                 .collect::<Result<BTreeMap<_, _>>>()?;

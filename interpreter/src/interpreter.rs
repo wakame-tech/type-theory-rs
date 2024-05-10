@@ -80,13 +80,13 @@ impl Eval for MacroApp {
         match macr.as_str() {
             "add!" => match (values[0].clone().literal()?, values[1].clone().literal()?) {
                 (Value::Number(a), Value::Number(b)) => {
-                    return Ok(Expr::Literal(Value::Number(a + b)))
+                    Ok(Expr::Literal(Value::Number(a + b)))
                 }
-                _ => return Err(anyhow!("add! only accept number")),
+                _ => Err(anyhow!("add! only accept number")),
             },
             "not!" => match values[0].clone().literal()? {
-                Value::Bool(v) => return Ok(Expr::Literal(Value::Bool(!v))),
-                _ => return Err(anyhow!("not! only accept bool")),
+                Value::Bool(v) => Ok(Expr::Literal(Value::Bool(!v))),
+                _ => Err(anyhow!("not! only accept bool")),
             },
             _ => Err(anyhow!("macro \"{}\" not found", macr)),
         }
