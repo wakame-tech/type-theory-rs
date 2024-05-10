@@ -38,6 +38,18 @@ impl TypeEnv {
             .ok_or(anyhow::anyhow!("{} not found", type_expr))
     }
 
+    pub fn get_by_id(&self, id: &Id) -> Result<String> {
+        self.id_map
+            .iter()
+            .find(|(_, v)| **v == *id)
+            .map(|(k, _)| k.clone())
+            .ok_or(anyhow::anyhow!("{} not found", id))
+    }
+
+    pub fn type_name(&self, id: Id) -> Result<Sexp> {
+        self.alloc.as_sexp(id, &mut Default::default())
+    }
+
     /// register `a` as subtype of `b`
     pub fn new_subtype(&mut self, a: Id, b: Id) {
         let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
@@ -90,7 +102,7 @@ impl TypeEnv {
     }
 
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {
-        log::debug!("TypeEnv register #{} :: {}", type_id, expr);
+        log::debug!("register_type_id #{}: {}", type_id, expr);
         self.id_map.insert(expr.to_string(), type_id);
         let i = self.tree.add_node(type_id);
         self.index_map.insert(type_id, i);
@@ -105,10 +117,9 @@ impl TypeEnv {
 
 impl Display for TypeEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "{}",
-            self.id_map.keys().cloned().collect::<Vec<_>>().join(",")
-        )
+        for (name, ty_id) in &self.id_map {
+            writeln!(f, "#{}: {}", ty_id, name)?;
+        }
+        Ok(())
     }
 }

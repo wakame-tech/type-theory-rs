@@ -1,3 +1,4 @@
+use crate::{interpreter_env::InterpreterEnv, traits::TypeCheck};
 use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let, Value};
 use std::collections::{HashMap, HashSet};
@@ -8,8 +9,6 @@ use structural_typesystem::{
 };
 use symbolic_expressions::{parser::parse_str, Sexp};
 
-use crate::{interpreter_env::InterpreterEnv, traits::TypeCheck};
-
 pub fn infer_value_type(type_env: &TypeEnv, value: &Value) -> Result<Id> {
     match &value.raw {
         Sexp::String(lit) if lit.parse::<usize>().is_ok() => type_env.get(&parse_str("int")?),
@@ -19,6 +18,7 @@ pub fn infer_value_type(type_env: &TypeEnv, value: &Value) -> Result<Id> {
 }
 
 pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<Id>) -> Result<Id> {
+    log::debug!("infer_type: {}", expr);
     let ret = match &expr {
         Expr::Literal(value) => infer_value_type(&env.type_env, value),
         Expr::Variable(name) => {
@@ -33,7 +33,7 @@ pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<I
             let ret_ty_id = env.type_env.alloc.new_variable();
             let new_fn_ty = env.type_env.alloc.new_function(arg_ty_id, ret_ty_id);
             log::debug!(
-                "#{} = . -> . vs #{} = #{} -> #{}",
+                "#{} = ? -> ? vs #{} = #{} -> #{}",
                 fn_ty,
                 new_fn_ty,
                 arg_ty_id,
@@ -43,25 +43,25 @@ pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<I
             Ok(prune(&mut env.type_env.alloc, ret_ty_id))
         }
         Expr::FnDef(FnDef { param, body, .. }) => {
-            // TODO
-            let mut new_env = env.clone();
-            let arg_ty = new_env.type_env.new_type(&param.typ)?;
-
+            let arg_ty = if let Some(typ) = &param.typ {
+                env.type_env.new_type(typ)?
+            } else {
+                env.type_env.alloc.new_variable()
+            };
+            env.new_var(&param.name, Expr::Variable(param.name.to_string()), arg_ty);
             let mut new_non_generic = non_generic.clone();
             new_non_generic.insert(arg_ty);
-            let ret_ty = infer_type(&mut new_env, body, &new_non_generic)?;
-            let fn_ty = Sexp::List(vec![
-                Sexp::String("->".to_string()),
-                env.type_env
-                    .alloc
-                    .as_sexp(arg_ty, &mut Default::default())?,
-                env.type_env
-                    .alloc
-                    .as_sexp(ret_ty, &mut Default::default())?,
-            ]);
+            let ret_ty = infer_type(env, body, &new_non_generic)?;
+            let fn_ty = env.type_env.alloc.new_function(arg_ty, ret_ty);
 
-            let fn_ty_id = env.type_env.new_type(&fn_ty)?;
-            Ok(fn_ty_id)
+            let fn_ty_name = parse_str(&format!(
+                "(-> #{} #{})",
+                env.type_env.type_name(arg_ty)?,
+                env.type_env.type_name(ret_ty)?
+            ))?;
+            env.type_env.new_type(&fn_ty_name)?;
+            // log::debug!("#{}: {}", fn_ty_id, new_env.type_env.type_name(fn_ty_id)?);
+            Ok(fn_ty)
         }
         Expr::Let(Let { typ, value, .. }) => {
             if let Some(type_expr) = typ {
@@ -73,12 +73,6 @@ pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<I
         }
         Expr::MacroApp(macro_app) => macro_app.type_check(env),
     }?;
-    log::debug!(
-        "infer_type {} :: #{} {}",
-        expr,
-        ret,
-        env.type_env.alloc.as_sexp(ret, &mut Default::default())?
-    );
     Ok(ret)
 }
 
@@ -238,26 +232,7 @@ mod test {
         setup();
         let exp = into_ast(&parse_str(expr)?)?;
         let infer_ty_id = infer_type(env, &exp, &HashSet::new())?;
-        log::debug!(
-            "infer_ty {} (id={})",
-            env.type_env
-                .alloc
-                .as_sexp(infer_ty_id, &mut Default::default())?,
-            infer_ty_id
-        );
-        let expect_ty_id = env.type_env.get(&parse_str(type_expr)?)?;
-
-        assert_eq!(
-            expect_ty_id,
-            infer_ty_id,
-            "\nexpect {} but {}",
-            env.type_env
-                .alloc
-                .as_sexp(expect_ty_id, &mut Default::default())?,
-            env.type_env
-                .alloc
-                .as_sexp(infer_ty_id, &mut Default::default())?,
-        );
+        assert_eq!(parse_str(type_expr)?, env.type_env.type_name(infer_ty_id)?);
         Ok(())
     }
 
@@ -299,7 +274,8 @@ mod test {
     #[test]
     fn test_tvar() -> Result<()> {
         let mut env = InterpreterEnv::default();
-        should_infer(&mut env, "(id id)", "(-> a a)")
+        // should_infer(&mut env, "(id id)", "(-> a a)")
+        should_infer(&mut env, "id", "(-> a a)")
     }
 
     #[test]

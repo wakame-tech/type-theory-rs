@@ -5,18 +5,22 @@ use symbolic_expressions::Sexp;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: String,
-    pub typ: Sexp,
+    pub typ: Option<Sexp>,
 }
 
 impl Parameter {
-    pub fn new(name: String, typ: Sexp) -> Self {
+    pub fn new(name: String, typ: Option<Sexp>) -> Self {
         Self { name, typ }
     }
 }
 
 impl Display for Parameter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.name, self.typ)
+        if let Some(typ) = &self.typ {
+            write!(f, "{}: {}", self.name, typ)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 

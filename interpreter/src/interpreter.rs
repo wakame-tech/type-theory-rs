@@ -50,7 +50,11 @@ impl Eval for FnApp {
             expr => Err(anyhow!("{} cannot apply", expr)),
         }?;
 
-        let ty_id = env.type_env.get(&f.param.typ)?;
+        let ty_id = if let Some(typ) = &f.param.typ {
+            env.type_env.get(typ)?
+        } else {
+            todo!()
+        };
 
         // scope
         let ctx = env.context_mut();

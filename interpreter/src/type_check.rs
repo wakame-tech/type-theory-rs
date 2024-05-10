@@ -15,7 +15,11 @@ use symbolic_expressions::parser::parse_str;
 
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        let param_typ = env.type_env.new_type(&self.param.typ)?;
+        let param_typ = if let Some(typ) = &self.param.typ {
+            env.type_env.new_type(typ)?
+        } else {
+            todo!()
+        };
         env.new_var(
             &self.param.name,
             Expr::Variable(self.param.name.clone()),
@@ -49,7 +53,7 @@ impl TypeCheck for FnApp {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         let f_type = self.0.type_check(env)?;
         let Type::Operator { name, types, .. } = env.type_env.alloc.from_id(f_type)? else {
-            return Err(anyhow::anyhow!("{} is not appliable type", self.0))
+            return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
         anyhow::ensure!(name == "->");
 

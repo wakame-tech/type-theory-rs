@@ -36,15 +36,6 @@ impl Context {
     }
 }
 
-impl Display for Context {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (name, (ty_id, expr)) in &self.variables {
-            writeln!(f, "- {} :: {} = {}", name, ty_id, expr)?;
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct InterpreterEnv {
     // TODO: type_env per each context
@@ -168,9 +159,18 @@ impl InterpreterEnv {
 
 impl Display for InterpreterEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "type_env: {}", self.type_env)?;
+        writeln!(f, "\n{}", self.type_env)?;
         for context in self.context_tree.node_weights() {
-            writeln!(f, "{}", context)?;
+            writeln!(f, "[{}]", context.name)?;
+            for (name, (ty_id, _expr)) in &context.variables {
+                writeln!(
+                    f,
+                    "#{}: {} :: {}",
+                    ty_id,
+                    name,
+                    self.type_env.get_by_id(ty_id).unwrap()
+                )?;
+            }
         }
         Ok(())
     }

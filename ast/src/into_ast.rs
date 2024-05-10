@@ -23,21 +23,24 @@ pub fn parse_type(alloc: &mut TypeAlloc, type_sexp: &Sexp) -> Result<Id> {
 
 /// parse (x : int)
 pub fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
-    let Ok(list) = sexp.list() else {
-        return Err(anyhow::anyhow!("parameter must be list"));
-    };
-    anyhow::ensure!(list[1].string()? == ":");
-    Ok(Parameter::new(
-        list[0].string()?.to_string(),
-        list[2].clone(),
-    ))
+    match sexp {
+        Sexp::String(arg) => Ok(Parameter::new(arg.to_string(), None)),
+        Sexp::List(list) if list[1].string().ok() == Some(&":".to_string()) => {
+            let name = list[0].string()?;
+            let typ = list[2].clone();
+            Ok(Parameter::new(name.to_string(), Some(typ)))
+        }
+        _ => Err(anyhow::anyhow!(
+            "parameter must be a string or a list. but {}",
+            sexp
+        )),
+    }
 }
 
 /// (lam (x : int) x)
 pub fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
     let param = parse_parameter(&list[1])?;
     let body = Box::new(into_ast(&list[2])?);
-    log::debug!("parse_lambda {} {}", param, body);
     Ok(Expr::FnDef(FnDef::new(param, body)))
 }
 
@@ -150,8 +153,10 @@ mod tests {
         let param = parse_parameter(&parse_str("(a : int)")?)?;
         assert_eq!(
             param,
-            Parameter::new("a".to_string(), Sexp::String("int".to_string()))
+            Parameter::new("a".to_string(), Some(Sexp::String("int".to_string())))
         );
+        let param = parse_parameter(&parse_str("a")?)?;
+        assert_eq!(param, Parameter::new("a".to_string(), None));
         Ok(())
     }
 
@@ -184,7 +189,7 @@ mod tests {
     #[test]
     fn lam() -> Result<()> {
         let fn_def = Expr::FnDef(FnDef::new(
-            Parameter::new("x".to_string(), Sexp::String("int".to_string())),
+            Parameter::new("x".to_string(), Some(Sexp::String("int".to_string()))),
             Box::new(Expr::Variable("x".to_string())),
         ));
         should_be_ast("(lam (x : int) x)", &fn_def)
@@ -193,10 +198,10 @@ mod tests {
     #[test]
     fn lam_wo_anno() -> Result<()> {
         let fn_def = Expr::FnDef(FnDef::new(
-            Parameter::new("x".to_string(), Sexp::String("int".to_string())),
+            Parameter::new("x".to_string(), None),
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam (x : int) x)", &fn_def)
+        should_be_ast("(lam x x)", &fn_def)
     }
 
     #[test]
