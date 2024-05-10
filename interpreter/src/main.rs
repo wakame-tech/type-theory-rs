@@ -53,7 +53,6 @@ pub(crate) mod tests {
                 .with_level(log::LevelFilter::Debug)
                 .init()
                 .unwrap();
-            pretty_backtrace::force_setup();
         });
     }
 }
