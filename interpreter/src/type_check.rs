@@ -17,8 +17,8 @@ fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
     if !is_subtype(env, a, b)? {
         return Err(anyhow::anyhow!(
             "{} is not subtype of {}",
-            env.alloc.as_sexp(a, &mut Default::default())?,
-            env.alloc.as_sexp(b, &mut Default::default())?
+            env.type_name(a)?,
+            env.type_name(b)?
         ));
     }
     Ok(())
@@ -26,20 +26,8 @@ fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
 
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        let param_typ = if let Some(typ) = &self.param.typ {
-            env.type_env.new_type(typ)?
-        } else {
-            todo!()
-        };
-        env.new_var(
-            &self.param.name,
-            Expr::Variable(self.param.name.clone()),
-            param_typ,
-        );
-
-        let body_typ = self.body.type_check(env)?;
-        let f_typ = env.type_env.alloc.new_function(param_typ, body_typ);
-        Ok(f_typ)
+        self.body.type_check(env)?;
+        infer_type(env, &Expr::FnDef(self.clone()), &mut HashSet::new())
     }
 }
 
@@ -68,20 +56,13 @@ impl TypeCheck for FnApp {
         };
         anyhow::ensure!(name == "->");
 
-        let (arg_ty, _ret_ty) = (types[0], types[1]);
+        let (arg_ty, ret_ty) = (types[0], types[1]);
         let param_ty = self.1.type_check(env)?;
 
         // if `arg_ty` is generic, skip subtype check
         if !env.type_env.alloc.is_generic(arg_ty)? {
             ensure_subtype(&mut env.type_env, param_ty, arg_ty)?;
         }
-
-        // TODO: clone `TypeEnv` instead of `InterpreterEnv` when infer type of generic variables
-        let ret_ty = infer_type(
-            &mut env.clone(),
-            &Expr::FnApp(self.clone()),
-            &mut HashSet::new(),
-        )?;
         Ok(ret_ty)
     }
 }
@@ -107,11 +88,7 @@ impl TypeCheck for Expr {
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::MacroApp(macro_app) => macro_app.type_check(env),
         }?;
-        log::debug!(
-            "type_check {} :: {}",
-            self,
-            env.type_env.alloc.as_sexp(ret, &mut Default::default())?
-        );
+        log::debug!("type_check {} :: {}", self, env.type_env.type_name(ret)?);
         Ok(ret)
     }
 }

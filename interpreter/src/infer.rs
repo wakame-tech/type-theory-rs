@@ -56,13 +56,13 @@ pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<I
             unify(&mut env.type_env, new_fn_ty, fn_ty)?;
             Ok(prune(&mut env.type_env.alloc, ret_ty_id))
         }
-        Expr::FnDef(FnDef { param, body, .. }) => {
-            let arg_ty = if let Some(typ) = &param.typ {
+        Expr::FnDef(FnDef { arg, body, .. }) => {
+            let arg_ty = if let Some(typ) = &arg.typ {
                 env.type_env.new_type(typ)?
             } else {
                 env.type_env.alloc.new_variable()
             };
-            env.new_var(&param.name, Expr::Variable(param.name.to_string()), arg_ty);
+            env.new_var(&arg.name, Expr::Variable(arg.name.to_string()), arg_ty);
             let mut new_non_generic = non_generic.clone();
             new_non_generic.insert(arg_ty);
             let ret_ty = infer_type(env, body, &new_non_generic)?;

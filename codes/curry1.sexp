@@ -1,2 +1,2 @@
-(let + (lam (a : int) (lam (b : int) (add! a b))))
+(let + (lam a (lam b (add! a b))))
 ((+ 1) 2)

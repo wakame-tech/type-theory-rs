@@ -1,4 +1,4 @@
-use crate::{interpreter_env::InterpreterEnv, traits::Eval};
+use crate::{infer::infer_type, interpreter_env::InterpreterEnv, traits::Eval};
 use anyhow::{anyhow, Ok, Result};
 use ast::{
     ast::{Expr, FnApp, FnDef, Let, MacroApp, Program, Value},
@@ -49,19 +49,19 @@ impl Eval for FnApp {
             expr => Err(anyhow!("{} cannot apply", expr)),
         }?;
 
-        let ty_id = if let Some(typ) = &f.param.typ {
-            env.type_env.get(typ)?
+        let param_ty = if let Some(arg_ty) = &f.arg.typ {
+            env.type_env.get(arg_ty)?
         } else {
-            todo!()
+            infer_type(env, &self.1, &mut Default::default())?
         };
 
         // scope
         let ctx = env.context_mut();
-        ctx.insert(&f.param.name, ty_id, param.clone());
+        ctx.insert(&f.arg.name, param_ty, param.clone());
         log::debug!(
             "@#{} bind {} = {}",
             env.current_context.index(),
-            f.param.name,
+            f.arg.name,
             param
         );
         env.switch_context(original_ctx);

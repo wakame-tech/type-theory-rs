@@ -1,3 +1,3 @@
-(let id (lam (x : a) x))
+(let id (lam x x))
 (id true)
 (id 2)

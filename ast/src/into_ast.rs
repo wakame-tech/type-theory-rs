@@ -96,7 +96,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
             _ => Ok(Expr::Variable(lit.to_string())),
         },
-        _ => panic!("invalid sexp"),
+        _ => Err(anyhow::anyhow!("invalid sexp: {}", sexp)),
     }
 }
 

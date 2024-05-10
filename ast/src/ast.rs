@@ -45,19 +45,19 @@ impl Display for FnApp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    pub param: Parameter,
+    pub arg: Parameter,
     pub body: Box<Expr>,
 }
 
 impl FnDef {
-    pub fn new(param: Parameter, body: Box<Expr>) -> Self {
-        Self { param, body }
+    pub fn new(arg: Parameter, body: Box<Expr>) -> Self {
+        Self { arg, body }
     }
 }
 
 impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) -> {}", self.param.to_string(), self.body)
+        write!(f, "({}) -> {}", self.arg.to_string(), self.body)
     }
 }
 

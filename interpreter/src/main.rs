@@ -26,6 +26,7 @@ fn main() -> Result<()> {
     f.read_to_string(&mut program)?;
     let sexps = program
         .split('\n')
+        .filter(|line| !line.is_empty())
         .map(|line| parse_str(line).map_err(|e| anyhow::anyhow!("{:?}", e)))
         .collect::<Result<Vec<_>>>()?;
 
