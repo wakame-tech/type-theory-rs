@@ -6,10 +6,10 @@ use simple_logger::SimpleLogger;
 use std::{env, fs::File, io::Read};
 use symbolic_expressions::parser::parse_str;
 
-pub mod builtin;
 pub mod infer;
 pub mod interpreter;
 pub mod interpreter_env;
+pub mod scope;
 pub mod traits;
 pub mod type_check;
 
@@ -34,7 +34,6 @@ fn main() -> Result<()> {
     let mut env = InterpreterEnv::default();
     let program = Program(program);
     program.type_check(&mut env)?;
-
     let ret = program.eval(&mut env)?;
     println!("{}", &ret);
     Ok(())

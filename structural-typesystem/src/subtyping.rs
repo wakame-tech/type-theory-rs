@@ -2,7 +2,7 @@ use crate::{
     type_env::TypeEnv,
     types::{Id, Type},
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
 use symbolic_expressions::parser::parse_str;
 
@@ -74,9 +74,7 @@ impl TypeEnv {
             (Type::Record { types: a_types, .. }, Type::Record { types: b_types, .. }) => {
                 self.is_subtype_map(a_types, b_types)
             }
-            (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => {
-                Err(anyhow!("type variable can't compare"))
-            }
+            (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => Ok(true),
             _ => Ok(false),
         }
     }

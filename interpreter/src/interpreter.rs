@@ -16,15 +16,15 @@ impl Eval for FnDef {
 impl Eval for Let {
     /// (let a int 1)
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
+        log::debug!("Let::eval {}", self);
         let value = self.value.eval(env)?;
-        // if value has context, move it
-        if env.context_map.contains_key(&self.value.to_string()) {
-            env.new_context(&self.name);
-            env.move_context(&self.value.to_string(), &self.name);
-            println!("move ctx {} -> {}", value, self.name);
-        }
-        let (_, expr) = env.get_variable_mut(&self.name)?;
-        *expr = value.clone();
+        let ty_id = if let Some(ty) = &self.typ {
+            env.type_env.get(ty)?
+        } else {
+            self.value.infer_type(env, &mut Default::default())?
+        };
+        env.current_mut()
+            .insert(&self.name, ty_id, *self.value.clone());
         Ok(value)
     }
 }
@@ -32,15 +32,10 @@ impl Eval for Let {
 impl Eval for FnApp {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         log::debug!("FnApp::eval {}", self);
-        let original_ctx = &env.context().name.to_string();
-        // eval param
-        let param = self.1.eval(env)?;
-
-        // get fn body
-        let f = match self.0.eval(env)? {
+        let (f, arg) = (self.0.eval(env)?, self.1.eval(env)?);
+        let f = match f {
             Expr::Variable(name) => {
-                if let (_, Expr::FnDef(fn_def)) = env.get_variable(&name)?.clone() {
-                    env.switch_context(&name);
+                if let (_, Expr::FnDef(fn_def)) = env.current().get(&name)?.clone() {
                     Ok(fn_def)
                 } else {
                     Err(anyhow!("{} is cannot apply", name))
@@ -56,18 +51,14 @@ impl Eval for FnApp {
             self.1.infer_type(env, &mut Default::default())?
         };
 
-        // scope
-        let ctx = env.context_mut();
-        ctx.insert(&f.arg.name, param_ty, param.clone());
-        log::debug!(
-            "@#{} bind {} = {}",
-            env.current_context.index(),
-            f.arg.name,
-            param
-        );
-        env.switch_context(original_ctx);
-
-        f.body.eval(env)
+        let scope = env.current().clone();
+        let scope = env.new_scope(scope);
+        scope.insert(&f.arg.name, param_ty, arg.clone());
+        log::debug!("@#{} bind {} = {}", scope.id, f.arg.name, arg);
+        let res = f.body.eval(env)?;
+        log::debug!("FnApp::eval {} {} = {}", f, arg, res);
+        env.pop_scope();
+        Ok(res)
     }
 }
 
@@ -99,10 +90,10 @@ impl Eval for Expr {
             Expr::Let(r#let) => r#let.eval(env),
             Expr::FnApp(fnapp) => fnapp.eval(env),
             Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
-            Expr::Variable(var) => Ok(env.get_variable(var)?.1.clone()),
+            Expr::Variable(var) => Ok(env.current().get(var)?.1.clone()),
             Expr::MacroApp(macro_app) => macro_app.eval(env),
         };
-        log::debug!("eval@#{} {}", env.current_context.index(), self);
+        log::debug!("eval scope={} {}", env.current(), self);
         ret
     }
 }

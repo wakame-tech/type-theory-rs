@@ -7,7 +7,7 @@ use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 use std::collections::HashSet;
 use structural_typesystem::{
     type_env::TypeEnv,
-    types::{Id, Type},
+    types::{fn_type, Id, Type},
 };
 
 fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
@@ -23,8 +23,21 @@ fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
 
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        self.body.type_check(env)?;
-        self.infer_type(env, &mut HashSet::new())
+        let scope = env.current().clone();
+        let arg_ty = if let Some(arg_ty) = &self.arg.typ {
+            env.type_env.new_type(arg_ty)?
+        } else {
+            env.type_env.alloc.new_variable()
+        };
+        let scope = env.new_scope(scope);
+        scope.insert(
+            &self.arg.name,
+            arg_ty,
+            Expr::Variable(self.arg.name.clone()),
+        );
+        let ret_ty = self.body.type_check(env)?;
+        let fn_ty = fn_type(&env.type_env.alloc, arg_ty, ret_ty)?;
+        env.type_env.new_type(&fn_ty)
     }
 }
 
@@ -38,7 +51,8 @@ impl TypeCheck for Let {
         } else {
             self.value.infer_type(env, &mut HashSet::new())?
         };
-        env.new_var(&self.name, *self.value.clone(), let_ty);
+        env.current_mut()
+            .insert(&self.name, let_ty, *self.value.clone());
         Ok(let_ty)
     }
 }
@@ -66,9 +80,10 @@ impl TypeCheck for FnApp {
 
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
+        log::debug!("type_check {}", self);
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, &mut Default::default()),
-            Expr::Variable(name) => Ok(env.get_variable(name)?.0),
+            Expr::Variable(name) => Ok(env.current().get(name)?.0),
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),

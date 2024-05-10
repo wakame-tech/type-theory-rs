@@ -1,3 +1,2 @@
-(let id (lam x x))
-(id true)
-(id 2)
+(let f (lam x ((+ x) 1)))
+(f 1)

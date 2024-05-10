@@ -56,7 +56,8 @@ impl InferType for FnDef {
         } else {
             env.type_env.alloc.new_variable()
         };
-        env.new_var(&arg.name, Expr::Variable(arg.name.to_string()), arg_ty);
+        env.current_mut()
+            .insert(&arg.name, arg_ty, Expr::Variable(arg.name.to_string()));
         let mut new_non_generic = non_generic.clone();
         new_non_generic.insert(arg_ty);
         let ret_ty = body.infer_type(env, &new_non_generic)?;
@@ -101,7 +102,7 @@ impl InferType for Expr {
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
-                let (id, _) = env.get_variable(name)?.clone();
+                let (id, _) = env.current().get(name)?.clone();
                 let ng = non_generic.iter().cloned().collect::<Vec<_>>();
                 let ret = fresh(&mut env.type_env, id, &ng);
                 Ok(ret)
@@ -259,7 +260,6 @@ mod test {
     use crate::tests::setup;
     use crate::traits::InferType;
     use anyhow::Result;
-    use ast::ast::Expr;
     use ast::into_ast::into_ast;
     use std::collections::HashSet;
     use symbolic_expressions::parser::parse_str;
@@ -296,18 +296,13 @@ mod test {
     #[test]
     fn test_not() -> Result<()> {
         let mut env = InterpreterEnv::default();
-        env.new_var(
-            "x",
-            Expr::Variable("x".to_string()),
-            env.type_env.get(&parse_str("bool")?)?,
-        );
         should_infer(&mut env, "(lam (x : bool) (not x))", "(-> bool bool)")
     }
 
     #[test]
     fn test_let_app() -> Result<()> {
         let mut env = InterpreterEnv::default();
-        should_infer(&mut env, "(let a (succ 1))", "int")
+        should_infer(&mut env, "(let a (id 1))", "int")
     }
 
     #[test]
