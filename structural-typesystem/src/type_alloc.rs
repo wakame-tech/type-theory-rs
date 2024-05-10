@@ -1,6 +1,6 @@
 use crate::{
     issuer::Issuer,
-    types::{Id, Type, TypeExpr},
+    types::{record_type, Id, Type, TypeExpr},
 };
 use anyhow::{anyhow, Result};
 use std::collections::BTreeMap;
@@ -26,7 +26,6 @@ impl TypeAlloc {
     /// create a new type variable
     pub fn new_variable(&mut self) -> Id {
         let id = self.alloc.len();
-        log::debug!("TypeAlloc::new_variable #{}", id);
         self.alloc.push(Type::Variable { id, instance: None });
         id
     }
@@ -38,7 +37,6 @@ impl TypeAlloc {
             name: name.to_string(),
             types: ids.to_vec(),
         });
-        log::debug!("TypeAlloc::new_operator #{} = {} {:?}", id, name, ids);
         id
     }
 
@@ -49,7 +47,6 @@ impl TypeAlloc {
             name: "->".to_string(),
             types: vec![arg, ret],
         };
-        log::debug!("TypeAlloc::new_function #{} = #{} -> #{}", id, arg, ret);
         self.alloc.push(typ);
         id
     }
@@ -116,17 +113,7 @@ impl TypeAlloc {
                     ))
                 }
             }
-            Type::Record { types, .. } => Ok(Sexp::List(
-                [vec![Sexp::String("record".to_string())],
-                    types
-                        .iter()
-                        .map(|(k, v)| {
-                            self.as_sexp(*v, &mut Default::default())
-                                .map(|t| Sexp::List(vec![Sexp::String(k.to_string()), t]))
-                        })
-                        .collect::<Result<Vec<_>>>()?]
-                .concat(),
-            )),
+            Type::Record { types, .. } => record_type(self, types),
         }
     }
 

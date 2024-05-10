@@ -1,8 +1,22 @@
+use crate::type_alloc::TypeAlloc;
+use anyhow::Result;
 use std::collections::BTreeMap;
 use symbolic_expressions::Sexp;
 
 pub type Id = usize;
 pub type TypeExpr = Sexp;
+
+pub fn record_type(alloc: &TypeAlloc, types: BTreeMap<String, Id>) -> Result<TypeExpr> {
+    Ok(Sexp::List(
+        vec![Ok(Sexp::String("record".to_string()))]
+            .into_iter()
+            .chain(types.into_iter().map(|(k, v)| {
+                let ty = alloc.as_sexp(v, &mut Default::default())?;
+                Ok(Sexp::List(vec![Sexp::String(k.to_string()), ty]))
+            }))
+            .collect::<Result<_>>()?,
+    ))
+}
 
 #[derive(Debug, Clone, Hash)]
 pub enum Type {

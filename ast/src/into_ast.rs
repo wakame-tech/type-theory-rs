@@ -3,6 +3,8 @@ use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
 
+pub const RECORD_KEYWORD: &'static str = "record";
+
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     match sexp {
         // without type annotation: `a`
@@ -75,13 +77,15 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref lam) if lam == "lam" => parse_lambda(list),
             Sexp::String(ref lt) if lt == "let" => parse_let(sexp),
-            _ if list[0].is_string() && list[0].string()? == &"record".to_string() => {
+            _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
             _ if list[0].is_string() && list[0].string()?.ends_with('!') => {
                 Ok(Expr::MacroApp(MacroApp(Sexp::List(
-                    [vec![Sexp::String(list[0].string()?.to_string())],
-                        list[1..].to_vec()]
+                    [
+                        vec![Sexp::String(list[0].string()?.to_string())],
+                        list[1..].to_vec(),
+                    ]
                     .concat(),
                 ))))
             }

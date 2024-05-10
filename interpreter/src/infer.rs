@@ -32,7 +32,6 @@ pub fn infer_value_type(
 }
 
 pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<Id>) -> Result<Id> {
-    log::debug!("infer_type: {}", expr);
     let ret = match &expr {
         Expr::Literal(value) => infer_value_type(env, value, non_generic),
         Expr::Variable(name) => {
@@ -87,6 +86,7 @@ pub fn infer_type(env: &mut InterpreterEnv, expr: &Expr, non_generic: &HashSet<I
         }
         Expr::MacroApp(macro_app) => macro_app.type_check(env),
     }?;
+    log::debug!("infer_type {} :: {}", expr, env.type_env.type_name(ret)?);
     Ok(ret)
 }
 

@@ -7,14 +7,13 @@ use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let, MacroApp, Program};
 use std::collections::HashSet;
 use structural_typesystem::{
-    subtyping::is_subtype,
     type_env::TypeEnv,
     types::{Id, Type},
 };
 use symbolic_expressions::parser::parse_str;
 
 fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
-    if !is_subtype(env, a, b)? {
+    if !env.is_subtype(a, b)? {
         return Err(anyhow::anyhow!(
             "{} is not subtype of {}",
             env.type_name(a)?,

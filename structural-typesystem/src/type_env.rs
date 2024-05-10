@@ -102,7 +102,6 @@ impl TypeEnv {
     }
 
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {
-        log::debug!("register_type_id #{}: {}", type_id, expr);
         self.id_map.insert(expr.to_string(), type_id);
         let i = self.tree.add_node(type_id);
         self.index_map.insert(type_id, i);

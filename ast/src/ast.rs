@@ -100,7 +100,15 @@ impl Display for Value {
             Value::Nil => write!(f, "nil"),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
-            Value::Record(record) => write!(f, "{:?}", record),
+            Value::Record(record) => write!(
+                f,
+                "(record {})",
+                record
+                    .iter()
+                    .map(|(k, v)| format!("({} {})", k, v))
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
         }
     }
 }
