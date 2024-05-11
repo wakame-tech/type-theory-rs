@@ -145,10 +145,7 @@ impl Expr {
     }
 
     pub fn has_context(&self) -> bool {
-        match self {
-            Expr::Let(_) | Expr::FnDef(_) => true,
-            _ => false,
-        }
+        matches!(self, Expr::Let(_) | Expr::FnDef(_))
     }
 }
 

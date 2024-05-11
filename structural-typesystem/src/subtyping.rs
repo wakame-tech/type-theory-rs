@@ -85,7 +85,7 @@ impl TypeEnv {
                     types: b_types,
                     ..
                 },
-            ) if &a_name == RECORD_TYPE_KEYWORD && &b_name == RECORD_TYPE_KEYWORD => {
+            ) if a_name == RECORD_TYPE_KEYWORD && b_name == RECORD_TYPE_KEYWORD => {
                 let a_types = a_types
                     .iter()
                     .map(|(k, v)| (k.as_ref().unwrap().clone(), *v))

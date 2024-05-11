@@ -1,10 +1,7 @@
 use crate::traits::InferType;
 use crate::{interpreter_env::InterpreterEnv, traits::Eval};
 use anyhow::{anyhow, Ok, Result};
-use ast::{
-    ast::{Expr, FnApp, FnDef, Let, Program, Value},
-    into_ast::into_ast,
-};
+use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 
 impl Eval for FnDef {
     fn eval(&self, _env: &mut InterpreterEnv) -> Result<Expr> {

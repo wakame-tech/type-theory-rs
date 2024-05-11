@@ -3,9 +3,9 @@ use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
 
-pub const LET_KEYWORD: &'static str = "let";
-pub const LAMBDA_KEYWORD: &'static str = "lam";
-pub const RECORD_KEYWORD: &'static str = "record";
+pub const LET_KEYWORD: &str = "let";
+pub const LAMBDA_KEYWORD: &str = "lam";
+pub const RECORD_KEYWORD: &str = "record";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     match sexp {

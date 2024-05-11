@@ -4,8 +4,8 @@ use symbolic_expressions::Sexp;
 pub type Id = usize;
 pub type TypeExpr = Sexp;
 
-pub const RECORD_TYPE_KEYWORD: &'static str = "record";
-pub const FN_TYPE_KEYWORD: &'static str = "->";
+pub const RECORD_TYPE_KEYWORD: &str = "record";
+pub const FN_TYPE_KEYWORD: &str = "->";
 
 #[derive(Debug, Clone, Hash)]
 pub enum Type {

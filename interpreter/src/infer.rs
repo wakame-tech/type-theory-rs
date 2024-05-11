@@ -93,7 +93,7 @@ impl InferType for Let {
             env.type_env.alloc.from_sexp(type_expr)
         } else {
             let infer_ty = value.infer_type(env, non_generic)?;
-            return Ok(infer_ty);
+            Ok(infer_ty)
         }
     }
 }
