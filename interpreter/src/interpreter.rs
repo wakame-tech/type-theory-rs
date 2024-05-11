@@ -2,7 +2,7 @@ use crate::traits::InferType;
 use crate::{interpreter_env::InterpreterEnv, traits::Eval};
 use anyhow::{anyhow, Ok, Result};
 use ast::{
-    ast::{Expr, FnApp, FnDef, Let, MacroApp, Program, Value},
+    ast::{Expr, FnApp, FnDef, Let, Program, Value},
     into_ast::into_ast,
 };
 
@@ -62,27 +62,6 @@ impl Eval for FnApp {
     }
 }
 
-impl Eval for MacroApp {
-    fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        let (macr, params) = (&self.0.list()?[0].string()?, &self.0.list()?[1..]);
-        let values = params
-            .iter()
-            .map(|expr| into_ast(expr).and_then(|e| e.eval(env)))
-            .collect::<Result<Vec<_>>>()?;
-        match macr.as_str() {
-            "add!" => match (values[0].clone().literal()?, values[1].clone().literal()?) {
-                (Value::Number(a), Value::Number(b)) => Ok(Expr::Literal(Value::Number(a + b))),
-                _ => Err(anyhow!("add! only accept number")),
-            },
-            "not!" => match values[0].clone().literal()? {
-                Value::Bool(v) => Ok(Expr::Literal(Value::Bool(!v))),
-                _ => Err(anyhow!("not! only accept bool")),
-            },
-            _ => Err(anyhow!("macro \"{}\" not found", macr)),
-        }
-    }
-}
-
 impl Eval for Expr {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         let ret = match self {
@@ -91,7 +70,6 @@ impl Eval for Expr {
             Expr::FnApp(fnapp) => fnapp.eval(env),
             Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
             Expr::Variable(var) => Ok(env.current().get(var)?.1.clone()),
-            Expr::MacroApp(macro_app) => macro_app.eval(env),
         };
         log::debug!("eval scope={} {}", env.current(), self);
         ret

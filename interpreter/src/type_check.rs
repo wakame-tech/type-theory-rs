@@ -96,7 +96,6 @@ impl TypeCheck for Expr {
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
-            Expr::MacroApp(macro_app) => macro_app.infer_type(env, &mut Default::default()),
         }?;
         log::debug!("type_check {} :: {}", self, env.type_env.type_name(ret)?);
         Ok(ret)

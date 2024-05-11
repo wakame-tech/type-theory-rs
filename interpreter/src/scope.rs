@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use ast::ast::{Expr, MacroApp};
+use ast::ast::Expr;
 use ast::ast::{FnDef, Parameter, Value};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -30,7 +30,7 @@ pub fn root_scope(type_env: &mut TypeEnv) -> Result<Scope> {
         Parameter::new("a".to_string(), Some(parse_str("int")?)),
         Box::new(Expr::FnDef(FnDef::new(
             Parameter::new("b".to_string(), Some(parse_str("int")?)),
-            Box::new(Expr::MacroApp(MacroApp(parse_str("(add! a b)")?))),
+            Box::new(Expr::Literal(Value::Nil)),
         ))),
     ));
     let builtin_variables = HashMap::from_iter(vec![

@@ -1,4 +1,4 @@
-use crate::ast::{Expr, FnApp, FnDef, Let, MacroApp, Parameter, Value};
+use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
 use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
@@ -81,15 +81,6 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             Sexp::String(ref lt) if lt == LET_KEYWORD => parse_let(sexp),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
-            }
-            _ if list[0].is_string() && list[0].string()?.ends_with('!') => {
-                Ok(Expr::MacroApp(MacroApp(Sexp::List(
-                    [
-                        vec![Sexp::String(list[0].string()?.to_string())],
-                        list[1..].to_vec(),
-                    ]
-                    .concat(),
-                ))))
             }
             _ if list.len() == 2 => parse_apply(&list[0], &list[1]),
             _ => Err(anyhow::anyhow!("illegal operands")),

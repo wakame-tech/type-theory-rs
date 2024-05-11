@@ -121,16 +121,12 @@ pub fn from_expr(expr: &Expr) -> Result<Value> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MacroApp(pub Sexp);
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Value),
     Variable(String),
     Let(Let),
     FnApp(FnApp),
     FnDef(FnDef),
-    MacroApp(MacroApp),
 }
 
 impl Expr {
@@ -164,7 +160,6 @@ impl Display for Expr {
             Expr::Let(let_) => write!(f, "{}", let_),
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
-            Expr::MacroApp(macro_app) => write!(f, "{}", macro_app.0),
         }
     }
 }

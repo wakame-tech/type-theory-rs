@@ -1,6 +1,6 @@
 use crate::{interpreter_env::InterpreterEnv, traits::InferType};
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, MacroApp, Value};
+use ast::ast::{Expr, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use structural_typesystem::{
     type_alloc::TypeAlloc,
@@ -98,17 +98,6 @@ impl InferType for Let {
     }
 }
 
-impl InferType for MacroApp {
-    fn infer_type(&self, env: &mut InterpreterEnv, _non_generic: &HashSet<Id>) -> Result<Id> {
-        let ret_ty = match self.0.list()?[0].string()?.as_str() {
-            "add!" => "int",
-            "not!" => "bool",
-            _ => panic!(),
-        };
-        env.type_env.get(&parse_str(ret_ty)?)
-    }
-}
-
 impl InferType for Expr {
     fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let ret = match self {
@@ -122,7 +111,6 @@ impl InferType for Expr {
             Expr::FnApp(app) => app.infer_type(env, non_generic),
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
-            Expr::MacroApp(macro_app) => macro_app.infer_type(env, non_generic),
         }?;
         log::debug!("infer_type {} :: {}", self, env.type_env.type_name(ret)?);
         Ok(ret)
