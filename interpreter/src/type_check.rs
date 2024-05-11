@@ -7,7 +7,7 @@ use ast::ast::{Expr, FnApp, FnDef, Let, Program};
 use std::collections::HashSet;
 use structural_typesystem::{
     type_env::TypeEnv,
-    types::{fn_type, Id, Type},
+    types::{Id, Type},
 };
 
 fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
@@ -27,7 +27,9 @@ impl TypeCheck for FnDef {
         let arg_ty = if let Some(arg_ty) = &self.arg.typ {
             env.type_env.new_type(arg_ty)?
         } else {
-            env.type_env.alloc.new_variable()
+            let id = env.type_env.alloc.issue_id();
+            env.type_env.alloc.insert(Type::variable(id));
+            id
         };
         let scope = env.new_scope(scope);
         scope.insert(
@@ -36,8 +38,11 @@ impl TypeCheck for FnDef {
             Expr::Variable(self.arg.name.clone()),
         );
         let ret_ty = self.body.type_check(env)?;
-        let fn_ty = fn_type(&env.type_env.alloc, arg_ty, ret_ty)?;
-        env.type_env.new_type(&fn_ty)
+        let fn_ty = env.type_env.alloc.issue_id();
+        env.type_env
+            .alloc
+            .insert(Type::function(fn_ty, arg_ty, ret_ty));
+        Ok(fn_ty)
     }
 }
 
@@ -62,12 +67,16 @@ impl TypeCheck for FnApp {
     /// v :: a
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         let f_ty = self.0.type_check(env)?;
-        let Type::Operator { name, types, .. } = env.type_env.alloc.from_id(f_ty)? else {
+        let Type::Operator {
+            op: name, types, ..
+        } = env.type_env.alloc.get(f_ty)?
+        else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
         anyhow::ensure!(name == "->");
 
-        let (arg_ty, ret_ty) = (types[0], types[1]);
+        let arg_ty = *types.iter().nth(0).unwrap().1;
+        let ret_ty = *types.iter().nth(1).unwrap().1;
         let param_ty = self.1.type_check(env)?;
 
         // if `arg_ty` is generic, skip subtype check

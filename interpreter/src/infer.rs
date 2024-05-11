@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use structural_typesystem::{
     type_alloc::TypeAlloc,
     type_env::TypeEnv,
-    types::{fn_type, Id, Type},
+    types::{Id, Type},
 };
-use symbolic_expressions::parser::parse_str;
+use symbolic_expressions::{parser::parse_str, Sexp};
 
 impl InferType for Value {
     fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
@@ -20,10 +20,19 @@ impl InferType for Value {
                     .iter()
                     .map(|(k, v)| {
                         let ty_id = v.infer_type(env, non_generic)?;
-                        Ok((k.to_string(), ty_id))
+                        Ok(Sexp::List(vec![
+                            Sexp::String(k.to_string()),
+                            env.type_env.alloc.as_sexp(ty_id)?,
+                        ]))
                     })
-                    .collect::<Result<BTreeMap<_, _>>>()?;
-                Ok(env.type_env.alloc.new_record(record_type))
+                    .collect::<Result<Vec<_>>>()?;
+                let record_type = Sexp::List(
+                    vec![Sexp::String("record".to_string())]
+                        .into_iter()
+                        .chain(record_type)
+                        .collect(),
+                );
+                env.type_env.new_type(&record_type)
             }
         }
     }
@@ -34,8 +43,12 @@ impl InferType for FnApp {
         let FnApp(f, v) = self;
         let fn_ty = f.infer_type(env, non_generic)?;
         let arg_ty_id = v.infer_type(env, non_generic)?;
-        let ret_ty_id = env.type_env.alloc.new_variable();
-        let new_fn_ty = env.type_env.alloc.new_function(arg_ty_id, ret_ty_id);
+        let ret_ty_id = env.type_env.alloc.issue_id();
+        env.type_env.alloc.insert(Type::variable(ret_ty_id));
+        let new_fn_ty = env.type_env.alloc.issue_id();
+        env.type_env
+            .alloc
+            .insert(Type::function(new_fn_ty, arg_ty_id, ret_ty_id));
         log::debug!(
             "#{} = ? -> ? vs #{} = #{} -> #{}",
             fn_ty,
@@ -54,21 +67,20 @@ impl InferType for FnDef {
         let arg_ty = if let Some(typ) = &arg.typ {
             env.type_env.new_type(typ)?
         } else {
-            env.type_env.alloc.new_variable()
+            let id = env.type_env.alloc.issue_id();
+            env.type_env.alloc.insert(Type::variable(id));
+            id
         };
         env.current_mut()
             .insert(&arg.name, arg_ty, Expr::Variable(arg.name.to_string()));
         let mut new_non_generic = non_generic.clone();
         new_non_generic.insert(arg_ty);
         let ret_ty = body.infer_type(env, &new_non_generic)?;
-        let fn_ty = env.type_env.alloc.new_function(arg_ty, ret_ty);
+        let fn_ty = env.type_env.alloc.issue_id();
+        env.type_env
+            .alloc
+            .insert(Type::function(fn_ty, arg_ty, ret_ty));
 
-        let fn_ty_name = parse_str(&format!(
-            "(-> #{} #{})",
-            env.type_env.type_name(arg_ty)?,
-            env.type_env.type_name(ret_ty)?
-        ))?;
-        env.type_env.new_type(&fn_ty_name)?;
         // log::debug!("#{}: {}", fn_ty_id, new_env.type_env.type_name(fn_ty_id)?);
         Ok(fn_ty)
     }
@@ -119,10 +131,15 @@ impl InferType for Expr {
 
 fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_generic: &[Id]) -> Id {
     let p = prune(&mut env.alloc, tp);
-    match env.alloc.from_id(p).unwrap().clone() {
+    match env.alloc.get(p).unwrap().clone() {
         Type::Variable { .. } => {
             if is_generic(&mut env.alloc, p, non_generic) {
-                *mappings.entry(p).or_insert(env.alloc.new_variable())
+                let insert = |env: &mut TypeEnv| {
+                    let id = env.alloc.issue_id();
+                    env.alloc.insert(Type::variable(id));
+                    id
+                };
+                *mappings.entry(p).or_insert(insert(env))
             } else {
                 p
             }
@@ -135,9 +152,6 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
             // env.alloc.new_operator(name, &ids)
             id
         }
-        Type::Record { .. } => {
-            todo!()
-        }
     }
 }
 
@@ -145,7 +159,7 @@ fn fresh(env: &mut TypeEnv, id: Id, non_generic: &[Id]) -> Id {
     log::debug!(
         "fresh #{} {} non_generic={:?}",
         id,
-        env.alloc.as_sexp(id, &mut Default::default()).unwrap(),
+        env.alloc.as_sexp(id).unwrap(),
         non_generic
     );
     let mut mappings: HashMap<Id, Id> = HashMap::new();
@@ -157,7 +171,7 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
     if a == b {
         return Ok(a);
     }
-    let (a_ty, b_ty) = (env.alloc.from_id(a)?, env.alloc.from_id(b)?);
+    let (a_ty, b_ty) = (env.alloc.get(a)?, env.alloc.get(b)?);
     log::debug!(
         "unify #{} = {} and #{} = {}",
         a,
@@ -172,8 +186,8 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
                     panic!("recursive unification")
                 }
                 log::debug!("type variable #{} := #{}", a, b);
-                env.alloc.from_id_mut(a)?.set_instance(b);
-                log::debug!("{:?}", env.alloc.from_id(a)?);
+                env.alloc.get_mut(a)?.set_instance(b);
+                log::debug!("{:?}", env.alloc.get(a)?);
             }
             Ok(b)
         }
@@ -181,32 +195,29 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
         // unify fn type
         (
             Type::Operator {
-                name: a_name,
+                op: a_name,
                 types: a_types,
                 ..
             },
             Type::Operator {
-                name: b_name,
+                op: b_name,
                 types: b_types,
                 ..
             },
-        ) if a_name == "->" && b_name == "->" && a_types.len() == 2 && b_types.len() == 2 => {
-            let param_ty_id = unify(env, a_types[0], b_types[0])?;
-            let ret_ty_id = unify(env, a_types[1], b_types[1])?;
-            let fn_ty = fn_type(&env.alloc, param_ty_id, ret_ty_id)?;
-            env.new_type(&fn_ty)
-        }
-        (
-            Type::Record {
-                id: _a_id,
-                types: _a_types,
-            },
-            Type::Record {
-                id: _b_id,
-                types: _b_types,
-            },
-        ) => {
-            todo!()
+        ) if a_name == b_name => {
+            let types = a_types
+                .iter()
+                .zip(b_types.iter())
+                .map(|((label, a), (_, b))| Ok((label.clone(), unify(env, *a, *b)?)))
+                .collect::<Result<BTreeMap<_, _>>>()?;
+            let id = env.alloc.issue_id();
+            let ty = Type::Operator {
+                id,
+                op: a_name.to_string(),
+                types,
+            };
+            env.alloc.insert(ty);
+            Ok(id)
         }
         _ => Err(anyhow::anyhow!(
             "unify: type mismatch: {:?} != {:?}",
@@ -218,13 +229,13 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
 
 /// returns an instance of t
 fn prune(alloc: &mut TypeAlloc, t: Id) -> Id {
-    log::debug!("prune #{} {:?}", t, alloc.from_id(t).unwrap());
-    match alloc.from_id(t) {
+    log::debug!("prune #{} {:?}", t, alloc.get(t).unwrap());
+    match alloc.get(t) {
         Ok(Type::Variable {
             instance: Some(instance_id),
             ..
         }) => {
-            let ty = alloc.from_id_mut(t).unwrap();
+            let ty = alloc.get_mut(t).unwrap();
             log::debug!("prune {:?}", ty);
             ty.set_instance(instance_id);
             instance_id
@@ -247,8 +258,12 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
     if prune_t == v {
         return true;
     }
-    if let Type::Operator { types, .. } = alloc.from_id(prune_t).unwrap().clone() {
-        occurs_in(alloc, v, &types)
+    if let Type::Operator { types, .. } = alloc.get(prune_t).unwrap().clone() {
+        occurs_in(
+            alloc,
+            v,
+            types.values().cloned().collect::<Vec<_>>().as_slice(),
+        )
     } else {
         false
     }

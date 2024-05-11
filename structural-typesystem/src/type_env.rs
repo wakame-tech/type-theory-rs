@@ -1,6 +1,6 @@
 use crate::{
     type_alloc::TypeAlloc,
-    types::{Id, TypeExpr, FN_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
+    types::{Id, Type, TypeExpr, FN_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use petgraph::prelude::*;
@@ -19,6 +19,31 @@ pub struct TypeEnv {
     /// subtyping tree
     index_map: HashMap<Id, NodeIndex>,
     tree: Graph<Id, ()>,
+}
+
+pub fn any() -> TypeExpr {
+    Sexp::String("any".to_string())
+}
+
+pub fn int() -> TypeExpr {
+    Sexp::String("int".to_string())
+}
+
+pub fn bool() -> TypeExpr {
+    Sexp::String("bool".to_string())
+}
+
+impl Default for TypeEnv {
+    fn default() -> Self {
+        let mut env = TypeEnv::new();
+
+        let any = env.new_type(&any()).unwrap();
+        let int = env.new_type(&int()).unwrap();
+        let bool = env.new_type(&bool()).unwrap();
+        env.new_subtype(int, any);
+        env.new_subtype(bool, any);
+        env
+    }
 }
 
 impl TypeEnv {
@@ -47,7 +72,7 @@ impl TypeEnv {
     }
 
     pub fn type_name(&self, id: Id) -> Result<Sexp> {
-        self.alloc.as_sexp(id, &mut Default::default())
+        self.alloc.as_sexp(id)
     }
 
     /// register `a` as subtype of `b`
@@ -56,29 +81,32 @@ impl TypeEnv {
         self.tree.add_edge(bi, ai, ());
     }
 
-    pub fn new_type(&mut self, type_expr: &TypeExpr) -> Result<Id> {
-        if let Some(id) = self.id_map.get(&type_expr.to_string()) {
+    pub fn new_type(&mut self, ty: &TypeExpr) -> Result<Id> {
+        if let Some(id) = self.id_map.get(&ty.to_string()) {
             return Ok(*id);
         }
-        match type_expr {
+        match ty {
             Sexp::String(v) if v.len() == 1 => {
-                let id = self.alloc.new_variable();
-                self.register_type_id(type_expr, id);
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::variable(id));
+                self.register_type_id(ty, id);
                 Ok(id)
             }
             Sexp::String(s) => {
-                let id = self.alloc.new_primitive(s);
-                self.register_type_id(type_expr, id);
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::primitive(id, s));
+                self.register_type_id(ty, id);
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
-                let (f, t) = (self.new_type(&list[1])?, self.new_type(&list[2])?);
-                let id = self.alloc.new_function(f, t);
-                self.register_type_id(type_expr, id);
+                let (arg, ret) = (self.new_type(&list[1])?, self.new_type(&list[2])?);
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::function(id, arg, ret));
+                self.register_type_id(ty, id);
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == RECORD_TYPE_KEYWORD => {
-                let entries = list[1..]
+                let record = list[1..]
                     .iter()
                     .map(|s| -> Result<_> {
                         let l = s.list()?;
@@ -86,19 +114,14 @@ impl TypeEnv {
                         let id = self.new_type(v)?;
                         Ok((k.to_string(), id))
                     })
-                    .collect::<Result<Vec<_>>>()?;
-                let id = self.alloc.new_record(BTreeMap::from_iter(entries));
-                self.register_type_id(type_expr, id);
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::record(id, record));
+                self.register_type_id(ty, id);
                 Ok(id)
             }
-            _ => panic!(),
+            _ => Err(anyhow::anyhow!("unsupported type: {}", ty)),
         }
-    }
-
-    pub fn new_type_from_id(&mut self, id: Id) -> Result<()> {
-        let expr = self.alloc.as_sexp(id, &mut Default::default())?;
-        self.register_type_id(&expr, id);
-        Ok(())
     }
 
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {

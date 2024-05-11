@@ -1,6 +1,6 @@
 use crate::{
     type_env::TypeEnv,
-    types::{Id, Type},
+    types::{Id, Type, RECORD_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
@@ -30,7 +30,7 @@ impl TypeEnv {
     /// subtyping order for [TypeExpr]
     pub fn is_subtype(&mut self, a: Id, b: Id) -> Result<bool> {
         let any = self.get(&parse_str("any")?)?;
-        let (a_ty, b_ty) = (self.alloc.from_id(a)?, self.alloc.from_id(b)?);
+        let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
         log::debug!(
             "#{} = {} <: #{} = {}",
             a,
@@ -61,17 +61,39 @@ impl TypeEnv {
             (
                 Type::Operator {
                     types: a_types,
-                    name: a_name,
+                    op: a_name,
                     ..
                 },
                 Type::Operator {
                     types: b_types,
-                    name: b_name,
+                    op: b_name,
                     ..
                 },
-            ) if a_name == b_name => self.is_subtype_vec(a_types.clone(), b_types.clone()),
+            ) if a_name == b_name => self.is_subtype_vec(
+                a_types.values().cloned().collect(),
+                b_types.values().cloned().collect(),
+            ),
             // record types
-            (Type::Record { types: a_types, .. }, Type::Record { types: b_types, .. }) => {
+            (
+                Type::Operator {
+                    op: a_name,
+                    types: a_types,
+                    ..
+                },
+                Type::Operator {
+                    op: b_name,
+                    types: b_types,
+                    ..
+                },
+            ) if &a_name == RECORD_TYPE_KEYWORD && &b_name == RECORD_TYPE_KEYWORD => {
+                let a_types = a_types
+                    .iter()
+                    .map(|(k, v)| (k.as_ref().unwrap().clone(), *v))
+                    .collect::<BTreeMap<_, _>>();
+                let b_types = b_types
+                    .iter()
+                    .map(|(k, v)| (k.as_ref().unwrap().clone(), *v))
+                    .collect::<BTreeMap<_, _>>();
                 self.is_subtype_map(a_types, b_types)
             }
             (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => Ok(true),
