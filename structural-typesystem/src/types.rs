@@ -9,30 +9,39 @@ pub const FN_TYPE_KEYWORD: &str = "->";
 
 #[derive(Debug, Clone, Hash)]
 pub enum Type {
+    Primitive {
+        id: Id,
+        name: String,
+    },
     Variable {
         id: Id,
         instance: Option<Id>,
     },
-    Operator {
+    Function {
         id: Id,
-        op: String,
-        types: BTreeMap<Option<String>, Id>,
+        arg: Id,
+        ret: Id,
+    },
+    Record {
+        id: Id,
+        fields: BTreeMap<String, Id>,
     },
 }
 
 impl Type {
     pub fn id(&self) -> Id {
         match self {
+            Type::Primitive { id, .. } => *id,
             Type::Variable { id, .. } => *id,
-            Type::Operator { id, .. } => *id,
+            Type::Function { id, .. } => *id,
+            Type::Record { id, .. } => *id,
         }
     }
 
     pub fn primitive(id: Id, name: &str) -> Self {
-        Type::Operator {
+        Type::Primitive {
             id,
-            op: name.to_string(),
-            types: BTreeMap::new(),
+            name: name.to_string(),
         }
     }
 
@@ -50,18 +59,10 @@ impl Type {
     }
 
     pub fn function(id: Id, arg: Id, ret: Id) -> Self {
-        Type::Operator {
-            id,
-            op: "->".to_string(),
-            types: BTreeMap::from_iter(vec![(None, arg), (None, ret)]),
-        }
+        Type::Function { id, arg, ret }
     }
 
-    pub fn record(id: Id, record: BTreeMap<String, Id>) -> Self {
-        Type::Operator {
-            id,
-            op: "record".to_string(),
-            types: record.into_iter().map(|(k, v)| (Some(k), v)).collect(),
-        }
+    pub fn record(id: Id, fields: BTreeMap<String, Id>) -> Self {
+        Type::Record { id, fields }
     }
 }

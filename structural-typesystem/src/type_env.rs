@@ -33,6 +33,25 @@ pub fn bool() -> TypeExpr {
     Sexp::String("bool".to_string())
 }
 
+pub fn arrow(arg: TypeExpr, ret: TypeExpr) -> TypeExpr {
+    Sexp::List(vec![Sexp::String(FN_TYPE_KEYWORD.to_string()), arg, ret])
+}
+
+pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
+    Sexp::List(
+        vec![Sexp::String(RECORD_TYPE_KEYWORD.to_string())]
+            .into_iter()
+            .chain(fields.iter().map(|(k, v)| {
+                Sexp::List(vec![
+                    Sexp::String(k.to_string()),
+                    Sexp::String(":".to_string()),
+                    v.clone(),
+                ])
+            }))
+            .collect(),
+    )
+}
+
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
@@ -106,17 +125,19 @@ impl TypeEnv {
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == RECORD_TYPE_KEYWORD => {
-                let record = list[1..]
+                let fields = list[1..]
                     .iter()
                     .map(|s| -> Result<_> {
                         let l = s.list()?;
-                        let (k, v) = (&l[0].string()?, &l[1]);
+                        let k = &l[0].string()?;
+                        anyhow::ensure!(l[1].string()? == ":", "missing colon {:?}", l);
+                        let v = &l[2];
                         let id = self.new_type(v)?;
                         Ok((k.to_string(), id))
                     })
                     .collect::<Result<BTreeMap<_, _>>>()?;
                 let id = self.alloc.issue_id();
-                self.alloc.insert(Type::record(id, record));
+                self.alloc.insert(Type::record(id, fields));
                 self.register_type_id(ty, id);
                 Ok(id)
             }

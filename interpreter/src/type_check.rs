@@ -67,23 +67,16 @@ impl TypeCheck for FnApp {
     /// v :: a
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
         let f_ty = self.0.type_check(env)?;
-        let Type::Operator {
-            op: name, types, ..
-        } = env.type_env.alloc.get(f_ty)?
-        else {
+        let Type::Function { arg, ret, .. } = env.type_env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
-        anyhow::ensure!(name == "->");
-
-        let arg_ty = *types.iter().nth(0).unwrap().1;
-        let ret_ty = *types.iter().nth(1).unwrap().1;
         let param_ty = self.1.type_check(env)?;
 
         // if `arg_ty` is generic, skip subtype check
-        if !env.type_env.alloc.is_generic(arg_ty)? {
-            ensure_subtype(&mut env.type_env, param_ty, arg_ty)?;
+        if !env.type_env.alloc.is_generic(arg)? {
+            ensure_subtype(&mut env.type_env, param_ty, arg)?;
         }
-        Ok(ret_ty)
+        Ok(ret)
     }
 }
 
@@ -126,15 +119,15 @@ mod tests {
     fn r#let() -> Result<()> {
         setup();
         for (expected, error) in [
-            ("(let x : (record (a int)) (record (a 3)))", None),
+            ("(let x : (record (a : int)) (record (a : 3)))", None),
             (
-                "(let x : (record (a int) (b bool)) (record (b true)))",
+                "(let x : (record (a : any) (b : bool)) (record (a : 1) (b : true)))",
                 None,
             ),
             (
-                "(let x : (record (a bool) (b int)) (record (b 1) (a 2)))",
+                "(let x : (record (a : bool) (b : int)) (record (b : 1) (a : 2)))",
                 Some(
-                    "(record (a int) (b int)) is not subtype of (record (a bool) (b int))"
+                    "(record (a : int) (b : int)) is not subtype of (record (a : bool) (b : int))"
                         .to_string(),
                 ),
             ),

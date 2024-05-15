@@ -64,7 +64,8 @@ fn parse_record(entries: &[Sexp]) -> Result<Value> {
     for entry in entries {
         let entry = entry.list()?;
         let key = entry[0].string()?;
-        let value = into_ast(&entry[1])?;
+        anyhow::ensure!(entry[1].string()? == ":", "missing colon {:?}", entry);
+        let value = into_ast(&entry[2])?;
         res.insert(key.to_string(), value);
     }
     Ok(Value::Record(res))
@@ -128,7 +129,7 @@ mod tests {
     #[test]
     fn record_literal() -> Result<()> {
         should_be_ast(
-            "(record (a 1) (b 2))",
+            "(record (a : 1) (b : 2))",
             &Expr::Literal(Value::Record(HashMap::from_iter(vec![
                 ("a".to_string(), Expr::Literal(Value::Number(1))),
                 ("b".to_string(), Expr::Literal(Value::Number(2))),

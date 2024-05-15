@@ -1,6 +1,6 @@
 use crate::{
     type_env::TypeEnv,
-    types::{Id, Type, RECORD_TYPE_KEYWORD},
+    types::{Id, Type},
 };
 use anyhow::Result;
 use std::collections::{BTreeMap, HashSet};
@@ -20,7 +20,7 @@ impl TypeEnv {
     fn is_subtype_map(&mut self, a: BTreeMap<String, Id>, b: BTreeMap<String, Id>) -> Result<bool> {
         let a_keys = a.keys().collect::<HashSet<_>>();
         let b_keys = b.keys().collect::<HashSet<_>>();
-        Ok(a_keys.is_subset(&b_keys)
+        Ok(a_keys == b_keys
             && a_keys.into_iter().all(|k| {
                 self.is_subtype(*a.get(k).unwrap(), *b.get(k).unwrap())
                     .unwrap_or(false)
@@ -31,74 +31,47 @@ impl TypeEnv {
     pub fn is_subtype(&mut self, a: Id, b: Id) -> Result<bool> {
         let any = self.get(&parse_str("any")?)?;
         let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
-        log::debug!(
-            "#{} = {} <: #{} = {}",
-            a,
-            self.type_name(a)?,
-            b,
-            self.type_name(b)?,
-        );
-
-        match (a_ty, b_ty) {
+        let res = match (a_ty, b_ty) {
             // any vs ?
-            (Type::Operator { id, .. }, _) if id == any => Ok(false),
+            (Type::Primitive { id, .. }, _) if id == any => Ok(false),
             // ? vs any
-            (_, Type::Operator { id, .. }) if id == any => Ok(true),
+            (_, Type::Primitive { id, .. }) if id == any => Ok(true),
             // primitive types
-            (
-                Type::Operator {
-                    id: a_id,
-                    types: a_types,
-                    ..
-                },
-                Type::Operator {
-                    id: b_id,
-                    types: b_types,
-                    ..
-                },
-            ) if a_types.is_empty() && b_types.is_empty() => Ok(self.has_edge(a_id, b_id)),
+            (Type::Primitive { id: a_id, .. }, Type::Primitive { id: b_id, .. }) => {
+                Ok(self.has_edge(a_id, b_id))
+            }
             // fn types
             (
-                Type::Operator {
-                    types: a_types,
-                    op: a_name,
+                Type::Function {
+                    arg: a_arg,
+                    ret: a_ret,
                     ..
                 },
-                Type::Operator {
-                    types: b_types,
-                    op: b_name,
+                Type::Function {
+                    arg: b_arg,
+                    ret: b_ret,
                     ..
                 },
-            ) if a_name == b_name => self.is_subtype_vec(
-                a_types.values().cloned().collect(),
-                b_types.values().cloned().collect(),
-            ),
+            ) => self.is_subtype_vec(vec![a_arg, a_ret], vec![b_arg, b_ret]),
             // record types
             (
-                Type::Operator {
-                    op: a_name,
-                    types: a_types,
-                    ..
+                Type::Record {
+                    fields: a_fields, ..
                 },
-                Type::Operator {
-                    op: b_name,
-                    types: b_types,
-                    ..
+                Type::Record {
+                    fields: b_fields, ..
                 },
-            ) if a_name == RECORD_TYPE_KEYWORD && b_name == RECORD_TYPE_KEYWORD => {
-                let a_types = a_types
-                    .iter()
-                    .map(|(k, v)| (k.as_ref().unwrap().clone(), *v))
-                    .collect::<BTreeMap<_, _>>();
-                let b_types = b_types
-                    .iter()
-                    .map(|(k, v)| (k.as_ref().unwrap().clone(), *v))
-                    .collect::<BTreeMap<_, _>>();
-                self.is_subtype_map(a_types, b_types)
-            }
+            ) => self.is_subtype_map(a_fields, b_fields),
             (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => Ok(true),
             _ => Ok(false),
-        }
+        };
+        log::debug!(
+            "check {} <: {} = {:?}",
+            self.type_name(a)?,
+            self.type_name(b)?,
+            res
+        );
+        res
     }
 }
 
@@ -142,12 +115,9 @@ mod test {
     #[test]
     fn test_type_cmp_record() -> Result<()> {
         let mut env = TypeEnv::default();
-        let rec_a = env.new_type(&parse_str("(record (a int))")?)?;
-        let rec_b = env.new_type(&parse_str("(record (a any) (b int))")?)?;
-        assert!(
-            env.is_subtype(rec_a, rec_b)?,
-            "{{ a: int }} <= {{ a: any, b: int }}"
-        );
+        let rec_a = env.new_type(&parse_str("(record (a : int) (b : int))")?)?;
+        let rec_b = env.new_type(&parse_str("(record (a : any) (b : int))")?)?;
+        assert!(env.is_subtype(rec_a, rec_b)?);
         Ok(())
     }
 }

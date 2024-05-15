@@ -4,10 +4,10 @@ use ast::ast::{Expr, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use structural_typesystem::{
     type_alloc::TypeAlloc,
-    type_env::TypeEnv,
+    type_env::{record, TypeEnv},
     types::{Id, Type},
 };
-use symbolic_expressions::{parser::parse_str, Sexp};
+use symbolic_expressions::parser::parse_str;
 
 impl InferType for Value {
     fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
@@ -15,23 +15,15 @@ impl InferType for Value {
             Value::Nil => env.type_env.get(&parse_str("int")?),
             Value::Bool(_) => env.type_env.get(&parse_str("bool")?),
             Value::Number(_) => env.type_env.get(&parse_str("int")?),
-            Value::Record(record) => {
-                let record_type = record
+            Value::Record(fields) => {
+                let fields = fields
                     .iter()
                     .map(|(k, v)| {
                         let ty_id = v.infer_type(env, non_generic)?;
-                        Ok(Sexp::List(vec![
-                            Sexp::String(k.to_string()),
-                            env.type_env.alloc.as_sexp(ty_id)?,
-                        ]))
+                        Ok((k.to_string(), env.type_env.alloc.as_sexp(ty_id)?))
                     })
-                    .collect::<Result<Vec<_>>>()?;
-                let record_type = Sexp::List(
-                    vec![Sexp::String("record".to_string())]
-                        .into_iter()
-                        .chain(record_type)
-                        .collect(),
-                );
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                let record_type = record(fields);
                 env.type_env.new_type(&record_type)
             }
         }
@@ -80,8 +72,6 @@ impl InferType for FnDef {
         env.type_env
             .alloc
             .insert(Type::function(fn_ty, arg_ty, ret_ty));
-
-        // log::debug!("#{}: {}", fn_ty_id, new_env.type_env.type_name(fn_ty_id)?);
         Ok(fn_ty)
     }
 }
@@ -112,7 +102,7 @@ impl InferType for Expr {
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
         }?;
-        log::debug!("infer_type {} :: {}", self, env.type_env.type_name(ret)?);
+        log::debug!("infer_type {} : {}", self, env.type_env.type_name(ret)?);
         Ok(ret)
     }
 }
@@ -132,12 +122,19 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
                 p
             }
         }
-        Type::Operator { id, .. } => {
-            // let ids = types
-            //     .iter()
-            //     .map(|t| self.fresh_rec(env, *t, mappings, non_generic))
-            // .collect::<Vec<_>>();
-            // env.alloc.new_operator(name, &ids)
+        Type::Primitive { id, .. } => id,
+        Type::Function { id, arg, ret } => {
+            let arg = fresh_rec(env, arg, mappings, non_generic);
+            let ret = fresh_rec(env, ret, mappings, non_generic);
+            env.alloc.insert(Type::function(id, arg, ret));
+            id
+        }
+        Type::Record { id, fields } => {
+            let fields = fields
+                .iter()
+                .map(|(k, id)| (k.to_string(), fresh_rec(env, *id, mappings, non_generic)))
+                .collect::<BTreeMap<_, _>>();
+            env.alloc.insert(Type::record(id, fields));
             id
         }
     }
@@ -168,6 +165,7 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
         env.type_name(b)?
     );
     match (&a_ty, &b_ty) {
+        (_, Type::Variable { .. }) => unify(env, s, t),
         (Type::Variable { .. }, _) => {
             if a != b {
                 if occurs_in_type(&mut env.alloc, a, b) {
@@ -179,32 +177,40 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
             }
             Ok(b)
         }
-        (Type::Operator { .. }, Type::Variable { .. }) => unify(env, s, t),
         // unify fn type
         (
-            Type::Operator {
-                op: a_name,
-                types: a_types,
+            Type::Function {
+                arg: a_arg,
+                ret: a_ret,
                 ..
             },
-            Type::Operator {
-                op: b_name,
-                types: b_types,
+            Type::Function {
+                arg: b_arg,
+                ret: b_ret,
                 ..
             },
-        ) if a_name == b_name => {
-            let types = a_types
+        ) => {
+            let arg = unify(env, *a_arg, *b_arg)?;
+            let ret = unify(env, *a_ret, *b_ret)?;
+            let id = env.alloc.issue_id();
+            env.alloc.insert(Type::function(id, arg, ret));
+            Ok(id)
+        }
+        (
+            Type::Record {
+                fields: a_types, ..
+            },
+            Type::Record {
+                fields: b_types, ..
+            },
+        ) => {
+            let fields = a_types
                 .iter()
                 .zip(b_types.iter())
                 .map(|((label, a), (_, b))| Ok((label.clone(), unify(env, *a, *b)?)))
                 .collect::<Result<BTreeMap<_, _>>>()?;
             let id = env.alloc.issue_id();
-            let ty = Type::Operator {
-                id,
-                op: a_name.to_string(),
-                types,
-            };
-            env.alloc.insert(ty);
+            env.alloc.insert(Type::record(id, fields));
             Ok(id)
         }
         _ => Err(anyhow::anyhow!(
@@ -246,14 +252,15 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
     if prune_t == v {
         return true;
     }
-    if let Type::Operator { types, .. } = alloc.get(prune_t).unwrap().clone() {
-        occurs_in(
+    match alloc.get(prune_t).unwrap().clone() {
+        Type::Primitive { id, .. } => occurs_in(alloc, id, &[]),
+        Type::Function { arg, ret, .. } => occurs_in(alloc, v, &[arg, ret]),
+        Type::Record { fields, .. } => occurs_in(
             alloc,
             v,
-            types.values().cloned().collect::<Vec<_>>().as_slice(),
-        )
-    } else {
-        false
+            fields.values().cloned().collect::<Vec<_>>().as_slice(),
+        ),
+        _ => false,
     }
 }
 
@@ -269,9 +276,12 @@ mod test {
 
     fn should_infer(env: &mut InterpreterEnv, expr: &str, type_expr: &str) -> Result<()> {
         setup();
+
+        let expected = parse_str(type_expr)?;
         let exp = into_ast(&parse_str(expr)?)?;
         let infer_ty_id = exp.infer_type(env, &HashSet::new())?;
-        assert_eq!(parse_str(type_expr)?, env.type_env.type_name(infer_ty_id)?);
+        let actual = env.type_env.type_name(infer_ty_id)?;
+        assert_eq!(expected, actual);
         Ok(())
     }
 
@@ -280,7 +290,7 @@ mod test {
         let mut env = InterpreterEnv::default();
         should_infer(&mut env, "true", "bool")?;
         should_infer(&mut env, "1", "int")?;
-        should_infer(&mut env, "(record (a 1))", "(record (a int))")?;
+        should_infer(&mut env, "(record (a : 1))", "(record (a : int))")?;
         Ok(())
     }
 

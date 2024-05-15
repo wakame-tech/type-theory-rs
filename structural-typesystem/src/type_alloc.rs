@@ -53,11 +53,7 @@ impl TypeAlloc {
         }
         match self.get(id)? {
             // primitive types
-            Type::Operator {
-                ref types,
-                op: ref name,
-                ..
-            } if types.is_empty() => Ok(Sexp::String(name.to_string())),
+            Type::Primitive { name, .. } => Ok(Sexp::String(name)),
             // concrete types
             Type::Variable {
                 instance: Some(inst),
@@ -65,26 +61,26 @@ impl TypeAlloc {
             } => self.as_sexp_rec(inst, issuer, nest + 1),
             // type variables
             Type::Variable { id, .. } => Ok(Sexp::String(issuer.name(id))),
-            Type::Operator {
-                ref types, ref op, ..
-            } => {
-                let types = types
+            Type::Function { arg, ret, .. } => Ok(Sexp::List(vec![
+                Sexp::String("->".to_string()),
+                self.as_sexp_rec(arg, issuer, nest + 1)?,
+                self.as_sexp_rec(ret, issuer, nest + 1)?,
+            ])),
+            Type::Record { fields, .. } => {
+                let fields = fields
                     .iter()
                     .map(|(label, id)| {
-                        if let Some(label) = label {
-                            Ok(Sexp::List(vec![
-                                Sexp::String(label.to_string()),
-                                self.as_sexp_rec(*id, issuer, nest + 1)?,
-                            ]))
-                        } else {
-                            self.as_sexp_rec(*id, issuer, nest + 1)
-                        }
+                        Ok(Sexp::List(vec![
+                            Sexp::String(label.to_string()),
+                            Sexp::String(":".to_string()),
+                            self.as_sexp_rec(*id, issuer, nest + 1)?,
+                        ]))
                     })
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Sexp::List(
-                    vec![Sexp::String(op.to_string())]
+                    vec![Sexp::String("record".to_string())]
                         .into_iter()
-                        .chain(types)
+                        .chain(fields)
                         .collect::<Vec<_>>(),
                 ))
             }
@@ -103,9 +99,11 @@ impl TypeAlloc {
 
     pub fn is_generic(&self, id: Id) -> Result<bool> {
         match self.get(id)? {
-            Type::Operator { types, .. } => {
-                Ok(types.iter().any(|(_, t)| self.is_generic(*t).unwrap()))
+            Type::Function { arg, ret, .. } => Ok(self.is_generic(arg)? || self.is_generic(ret)?),
+            Type::Record { fields, .. } => {
+                Ok(fields.values().any(|id| self.is_generic(*id).unwrap()))
             }
+            Type::Primitive { .. } => Ok(false),
             Type::Variable { .. } => Ok(true),
         }
     }
@@ -128,8 +126,11 @@ mod tests {
     #[test]
     fn parse_record_type() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let rec = type_env.new_type(&parse_str("(record (a int))")?)?;
-        assert_eq!(type_env.alloc.as_sexp(rec)?, parse_str("(record (a int))")?,);
+        let rec = type_env.new_type(&parse_str("(record (a : int))")?)?;
+        assert_eq!(
+            type_env.alloc.as_sexp(rec)?,
+            parse_str("(record (a : int))")?,
+        );
         Ok(())
     }
 }
