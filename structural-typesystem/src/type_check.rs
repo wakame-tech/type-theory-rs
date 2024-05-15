@@ -1,11 +1,15 @@
-use crate::traits::{InferType, TypeCheck};
-use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Program};
-use std::collections::HashSet;
-use structural_typesystem::{
+use crate::{
+    infer::InferType,
     type_env::TypeEnv,
     types::{Id, Type},
 };
+use anyhow::Result;
+use ast::ast::{Expr, FnApp, FnDef, Let, Program};
+use std::collections::HashSet;
+
+pub trait TypeCheck {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id>;
+}
 
 fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
     if !env.is_subtype(a, b)? {
@@ -43,7 +47,9 @@ impl TypeCheck for Let {
             ensure_subtype(env, value_ty, decl_ty)?;
             decl_ty
         } else {
-            self.value.infer_type(env, &mut HashSet::new())?
+            let infer_ty = self.value.infer_type(env, &mut HashSet::new())?;
+            log::debug!("infer {} : {}", self.name, env.type_name(infer_ty)?);
+            infer_ty
         };
         env.set_variable(&self.name, let_ty);
         Ok(let_ty)
@@ -70,7 +76,6 @@ impl TypeCheck for FnApp {
 
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        log::debug!("type_check {}", self);
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, &mut Default::default()),
             Expr::Variable(name) => env.get_variable(name),
@@ -78,7 +83,7 @@ impl TypeCheck for Expr {
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
         }?;
-        log::debug!("type_check {} :: {}", self, env.type_name(ret)?);
+        log::debug!("{} : {}", self, env.type_name(ret)?);
         Ok(ret)
     }
 }
@@ -98,7 +103,7 @@ impl TypeCheck for Program {
 
 #[cfg(test)]
 mod tests {
-    use crate::{tests::setup, traits::TypeCheck};
+    use crate::{tests::setup, type_check::TypeCheck};
     use anyhow::Result;
     use ast::into_ast::into_ast;
     use symbolic_expressions::parser::parse_str;

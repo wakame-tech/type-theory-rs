@@ -9,4 +9,3 @@ edition = "2021"
 log = "0.4.17"
 symbolic_expressions = "5.0.3"
 anyhow = "1"
-structural-typesystem = { path = "../structural-typesystem" }

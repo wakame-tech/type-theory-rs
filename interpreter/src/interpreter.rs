@@ -1,6 +1,10 @@
-use crate::{interpreter_env::InterpreterEnv, traits::Eval};
+use crate::interpreter_env::InterpreterEnv;
 use anyhow::{anyhow, Ok, Result};
 use ast::ast::{Expr, FnApp, FnDef, Let, Program};
+
+pub trait Eval {
+    fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr>;
+}
 
 impl Eval for FnDef {
     fn eval(&self, _env: &mut InterpreterEnv) -> Result<Expr> {

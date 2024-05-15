@@ -1,13 +1,16 @@
-use crate::traits::InferType;
-use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Value};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use structural_typesystem::{
+use crate::{
     type_alloc::TypeAlloc,
     type_env::{record, TypeEnv},
     types::{Id, Type},
 };
+use anyhow::Result;
+use ast::ast::{Expr, FnApp, FnDef, Let, Value};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use symbolic_expressions::parser::parse_str;
+
+pub trait InferType {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id>;
+}
 
 impl InferType for Value {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
@@ -98,7 +101,7 @@ impl InferType for Expr {
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
         }?;
-        log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
+        // log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
         Ok(ret)
     }
 }
@@ -120,29 +123,26 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
         }
         Type::Primitive { id, .. } => id,
         Type::Function { id, arg, ret } => {
-            let arg = fresh_rec(env, arg, mappings, non_generic);
-            let ret = fresh_rec(env, ret, mappings, non_generic);
-            env.alloc.insert(Type::function(id, arg, ret));
+            fresh_rec(env, arg, mappings, non_generic);
+            fresh_rec(env, ret, mappings, non_generic);
             id
         }
         Type::Record { id, fields } => {
-            let fields = fields
-                .iter()
-                .map(|(k, id)| (k.to_string(), fresh_rec(env, *id, mappings, non_generic)))
-                .collect::<BTreeMap<_, _>>();
-            env.alloc.insert(Type::record(id, fields));
+            for (_, id) in fields {
+                fresh_rec(env, id, mappings, non_generic);
+            }
             id
         }
     }
 }
 
 fn fresh(env: &mut TypeEnv, id: Id, non_generic: &[Id]) -> Id {
-    log::debug!(
-        "fresh #{} {} non_generic={:?}",
-        id,
-        env.alloc.as_sexp(id).unwrap(),
-        non_generic
-    );
+    // log::debug!(
+    //     "fresh #{} {} non_generic={:?}",
+    //     id,
+    //     env.alloc.as_sexp(id).unwrap(),
+    //     non_generic
+    // );
     let mut mappings: HashMap<Id, Id> = HashMap::new();
     fresh_rec(env, id, &mut mappings, non_generic)
 }
@@ -153,13 +153,13 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
         return Ok(a);
     }
     let (a_ty, b_ty) = (env.alloc.get(a)?, env.alloc.get(b)?);
-    log::debug!(
-        "unify #{} = {} and #{} = {}",
-        a,
-        env.type_name(a)?,
-        b,
-        env.type_name(b)?
-    );
+    // log::debug!(
+    //     "unify #{} = {} and #{} = {}",
+    //     a,
+    //     env.type_name(a)?,
+    //     b,
+    //     env.type_name(b)?
+    // );
     match (&a_ty, &b_ty) {
         (_, Type::Variable { .. }) => unify(env, s, t),
         (Type::Variable { .. }, _) => {
@@ -167,9 +167,8 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
                 if occurs_in_type(&mut env.alloc, a, b) {
                     panic!("recursive unification")
                 }
-                log::debug!("type variable #{} := #{}", a, b);
+                // log::debug!("type variable #{} := #{}", a, b);
                 env.alloc.get_mut(a)?.set_instance(b);
-                log::debug!("{:?}", env.alloc.get(a)?);
             }
             Ok(b)
         }
@@ -219,14 +218,13 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
 
 /// returns an instance of t
 fn prune(alloc: &mut TypeAlloc, t: Id) -> Id {
-    log::debug!("prune #{} {:?}", t, alloc.get(t).unwrap());
+    // log::debug!("prune #{} {:?}", t, alloc.get(t).unwrap());
     match alloc.get(t) {
         Ok(Type::Variable {
             instance: Some(instance_id),
             ..
         }) => {
             let ty = alloc.get_mut(t).unwrap();
-            log::debug!("prune {:?}", ty);
             ty.set_instance(instance_id);
             instance_id
         }
@@ -262,12 +260,10 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::tests::setup;
-    use crate::traits::InferType;
+    use crate::{infer::InferType, tests::setup, type_env::TypeEnv};
     use anyhow::Result;
     use ast::into_ast::into_ast;
     use std::collections::HashSet;
-    use structural_typesystem::type_env::TypeEnv;
     use symbolic_expressions::parser::parse_str;
 
     fn should_infer(env: &mut TypeEnv, expr: &str, type_expr: &str) -> Result<()> {

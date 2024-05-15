@@ -1,17 +1,15 @@
-use crate::traits::{Eval, TypeCheck};
+use crate::interpreter::Eval;
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
 use interpreter_env::InterpreterEnv;
 use simple_logger::SimpleLogger;
 use std::{env, fs::File, io::Read};
+use structural_typesystem::type_check::TypeCheck;
 use symbolic_expressions::parser::parse_str;
 
-pub mod infer;
 pub mod interpreter;
 pub mod interpreter_env;
 pub mod scope;
-pub mod traits;
-pub mod type_check;
 
 fn main() -> Result<()> {
     SimpleLogger::new()
@@ -37,22 +35,4 @@ fn main() -> Result<()> {
     let ret = program.eval(&mut env)?;
     println!("{}", &ret);
     Ok(())
-}
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use simple_logger::SimpleLogger;
-    use std::sync::Once;
-
-    static INIT: Once = Once::new();
-
-    pub fn setup() {
-        INIT.call_once(|| {
-            SimpleLogger::new()
-                .without_timestamps()
-                .with_level(log::LevelFilter::Debug)
-                .init()
-                .unwrap();
-        });
-    }
 }
