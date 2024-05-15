@@ -8,12 +8,13 @@ use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Debug, Display},
 };
-use symbolic_expressions::Sexp;
+use symbolic_expressions::{parser::parse_str, Sexp};
 
 /// [TypeEnv] will be created per each [Expr::FnDef]
 #[derive(Debug, Clone)]
 pub struct TypeEnv {
     pub alloc: TypeAlloc,
+    variables: HashMap<String, Id>,
     /// key is stringified sexp
     id_map: HashMap<String, Id>,
     /// subtyping tree
@@ -61,6 +62,17 @@ impl Default for TypeEnv {
         let bool = env.new_type(&bool()).unwrap();
         env.new_subtype(int, any);
         env.new_subtype(bool, any);
+
+        let not_id = env.new_type(&parse_str("(-> bool bool)").unwrap()).unwrap();
+        let id_id = env.new_type(&parse_str("(-> a a)").unwrap()).unwrap();
+        let plus_id = env
+            .new_type(&parse_str("(-> int (-> int int))").unwrap())
+            .unwrap();
+        env.variables = HashMap::from_iter(vec![
+            ("not".to_string(), not_id),
+            ("id".to_string(), id_id),
+            ("+".to_string(), plus_id),
+        ]);
         env
     }
 }
@@ -69,6 +81,7 @@ impl TypeEnv {
     pub fn new() -> Self {
         Self {
             alloc: TypeAlloc::new(),
+            variables: HashMap::new(),
             id_map: HashMap::new(),
             index_map: HashMap::new(),
             tree: Graph::new(),
@@ -143,6 +156,17 @@ impl TypeEnv {
             }
             _ => Err(anyhow::anyhow!("unsupported type: {}", ty)),
         }
+    }
+
+    pub fn set_variable(&mut self, name: &str, ty: Id) {
+        self.variables.insert(name.to_string(), ty);
+    }
+
+    pub fn get_variable(&self, name: &str) -> Result<Id> {
+        self.variables
+            .get(name)
+            .cloned()
+            .ok_or(anyhow::anyhow!("{} not found", name))
     }
 
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {

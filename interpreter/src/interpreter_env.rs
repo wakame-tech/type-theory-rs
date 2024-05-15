@@ -1,4 +1,4 @@
-use crate::scope::{root_scope, Scope};
+use crate::scope::Scope;
 use std::{collections::HashMap, fmt::Display};
 use structural_typesystem::type_env::TypeEnv;
 
@@ -12,11 +12,8 @@ pub struct InterpreterEnv {
 
 impl Default for InterpreterEnv {
     fn default() -> Self {
-        let mut global_type_env = TypeEnv::default();
-        let root = root_scope(&mut global_type_env).unwrap();
-        let mut scopes = HashMap::new();
-        scopes.insert(0, root);
-
+        let global_type_env = TypeEnv::default();
+        let scopes = HashMap::new();
         Self {
             current_index: 0,
             type_env: global_type_env,
@@ -58,14 +55,8 @@ impl Display for InterpreterEnv {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "\n{}", self.type_env)?;
         for (_, context) in &self.scopes {
-            for (name, (ty_id, _expr)) in &context.variables {
-                writeln!(
-                    f,
-                    "#{}: {} :: {}",
-                    ty_id,
-                    name,
-                    self.type_env.get_by_id(ty_id).unwrap()
-                )?;
+            for (name, expr) in &context.variables {
+                writeln!(f, "#{} = {}", name, expr)?;
             }
         }
         Ok(())

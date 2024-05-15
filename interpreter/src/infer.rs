@@ -63,8 +63,7 @@ impl InferType for FnDef {
             env.type_env.alloc.insert(Type::variable(id));
             id
         };
-        env.current_mut()
-            .insert(&arg.name, arg_ty, Expr::Variable(arg.name.to_string()));
+        env.type_env.set_variable(&arg.name, arg_ty);
         let mut new_non_generic = non_generic.clone();
         new_non_generic.insert(arg_ty);
         let ret_ty = body.infer_type(env, &new_non_generic)?;
@@ -93,7 +92,7 @@ impl InferType for Expr {
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
-                let (id, _) = env.current().get(name)?.clone();
+                let id = env.type_env.get_variable(name)?.clone();
                 let ng = non_generic.iter().cloned().collect::<Vec<_>>();
                 let ret = fresh(&mut env.type_env, id, &ng);
                 Ok(ret)

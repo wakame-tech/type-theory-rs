@@ -23,7 +23,6 @@ fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
 
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut InterpreterEnv) -> Result<Id> {
-        let scope = env.current().clone();
         let arg_ty = if let Some(arg_ty) = &self.arg.typ {
             env.type_env.new_type(arg_ty)?
         } else {
@@ -31,12 +30,7 @@ impl TypeCheck for FnDef {
             env.type_env.alloc.insert(Type::variable(id));
             id
         };
-        let scope = env.new_scope(scope);
-        scope.insert(
-            &self.arg.name,
-            arg_ty,
-            Expr::Variable(self.arg.name.clone()),
-        );
+        env.type_env.set_variable(&self.arg.name, arg_ty);
         let ret_ty = self.body.type_check(env)?;
         let fn_ty = env.type_env.alloc.issue_id();
         env.type_env
@@ -56,8 +50,7 @@ impl TypeCheck for Let {
         } else {
             self.value.infer_type(env, &mut HashSet::new())?
         };
-        env.current_mut()
-            .insert(&self.name, let_ty, *self.value.clone());
+        env.type_env.set_variable(&self.name, let_ty);
         Ok(let_ty)
     }
 }
@@ -85,7 +78,7 @@ impl TypeCheck for Expr {
         log::debug!("type_check {}", self);
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, &mut Default::default()),
-            Expr::Variable(name) => Ok(env.current().get(name)?.0),
+            Expr::Variable(name) => env.type_env.get_variable(name),
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
