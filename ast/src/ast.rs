@@ -1,22 +1,29 @@
 use anyhow::Result;
-use std::fmt::{Debug, Display};
+use std::{
+    collections::HashMap,
+    fmt::{Debug, Display},
+};
 use symbolic_expressions::Sexp;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: String,
-    pub typ: Sexp,
+    pub typ: Option<Sexp>,
 }
 
 impl Parameter {
-    pub fn new(name: String, typ: Sexp) -> Self {
+    pub fn new(name: String, typ: Option<Sexp>) -> Self {
         Self { name, typ }
     }
 }
 
 impl Display for Parameter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.name, self.typ)
+        if let Some(typ) = &self.typ {
+            write!(f, "{}: {}", self.name, typ)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -38,19 +45,19 @@ impl Display for FnApp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    pub param: Parameter,
+    pub arg: Parameter,
     pub body: Box<Expr>,
 }
 
 impl FnDef {
-    pub fn new(param: Parameter, body: Box<Expr>) -> Self {
-        Self { param, body }
+    pub fn new(arg: Parameter, body: Box<Expr>) -> Self {
+        Self { arg, body }
     }
 }
 
 impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) -> {}", self.param.to_string(), self.body)
+        write!(f, "({}) -> {}", self.arg, self.body)
     }
 }
 
@@ -71,7 +78,7 @@ impl Display for Let {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "let {}: {} = {}",
+            "let {} : {} = {}",
             self.name,
             self.typ.as_ref().unwrap_or(&Sexp::Empty),
             self.value
@@ -80,19 +87,29 @@ impl Display for Let {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Value {
-    pub raw: Sexp,
-}
-
-impl Value {
-    pub fn new(raw: Sexp) -> Self {
-        Value { raw }
-    }
+pub enum Value {
+    Nil,
+    Bool(bool),
+    Number(i64),
+    Record(HashMap<String, Expr>),
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.raw)
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Record(record) => write!(
+                f,
+                "(record {})",
+                record
+                    .iter()
+                    .map(|(k, v)| format!("({} : {})", k, v))
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+        }
     }
 }
 
@@ -104,16 +121,12 @@ pub fn from_expr(expr: &Expr) -> Result<Value> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MacroApp(pub Sexp);
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Literal(Value),
     Variable(String),
     Let(Let),
     FnApp(FnApp),
     FnDef(FnDef),
-    MacroApp(MacroApp),
 }
 
 impl Expr {
@@ -130,6 +143,10 @@ impl Expr {
             _ => Err(anyhow::anyhow!("variable expected")),
         }
     }
+
+    pub fn has_context(&self) -> bool {
+        matches!(self, Expr::Let(_) | Expr::FnDef(_))
+    }
 }
 
 impl Display for Expr {
@@ -140,7 +157,6 @@ impl Display for Expr {
             Expr::Let(let_) => write!(f, "{}", let_),
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
-            Expr::MacroApp(macro_app) => write!(f, "{}", macro_app.0),
         }
     }
 }
