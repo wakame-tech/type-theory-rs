@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{
     issuer::Issuer,
     types::{Id, Type, TypeExpr},

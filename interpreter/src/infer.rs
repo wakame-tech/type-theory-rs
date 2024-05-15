@@ -1,4 +1,4 @@
-use crate::{interpreter_env::InterpreterEnv, traits::InferType};
+use crate::traits::InferType;
 use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -10,36 +10,35 @@ use structural_typesystem::{
 use symbolic_expressions::parser::parse_str;
 
 impl InferType for Value {
-    fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         match self {
-            Value::Nil => env.type_env.get(&parse_str("int")?),
-            Value::Bool(_) => env.type_env.get(&parse_str("bool")?),
-            Value::Number(_) => env.type_env.get(&parse_str("int")?),
+            Value::Nil => env.get(&parse_str("int")?),
+            Value::Bool(_) => env.get(&parse_str("bool")?),
+            Value::Number(_) => env.get(&parse_str("int")?),
             Value::Record(fields) => {
                 let fields = fields
                     .iter()
                     .map(|(k, v)| {
                         let ty_id = v.infer_type(env, non_generic)?;
-                        Ok((k.to_string(), env.type_env.alloc.as_sexp(ty_id)?))
+                        Ok((k.to_string(), env.alloc.as_sexp(ty_id)?))
                     })
                     .collect::<Result<BTreeMap<_, _>>>()?;
                 let record_type = record(fields);
-                env.type_env.new_type(&record_type)
+                env.new_type(&record_type)
             }
         }
     }
 }
 
 impl InferType for FnApp {
-    fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let FnApp(f, v) = self;
         let fn_ty = f.infer_type(env, non_generic)?;
         let arg_ty_id = v.infer_type(env, non_generic)?;
-        let ret_ty_id = env.type_env.alloc.issue_id();
-        env.type_env.alloc.insert(Type::variable(ret_ty_id));
-        let new_fn_ty = env.type_env.alloc.issue_id();
-        env.type_env
-            .alloc
+        let ret_ty_id = env.alloc.issue_id();
+        env.alloc.insert(Type::variable(ret_ty_id));
+        let new_fn_ty = env.alloc.issue_id();
+        env.alloc
             .insert(Type::function(new_fn_ty, arg_ty_id, ret_ty_id));
         log::debug!(
             "#{} = ? -> ? vs #{} = #{} -> #{}",
@@ -48,38 +47,36 @@ impl InferType for FnApp {
             arg_ty_id,
             ret_ty_id
         );
-        unify(&mut env.type_env, new_fn_ty, fn_ty)?;
-        Ok(prune(&mut env.type_env.alloc, ret_ty_id))
+        unify(env, new_fn_ty, fn_ty)?;
+        Ok(prune(&mut env.alloc, ret_ty_id))
     }
 }
 
 impl InferType for FnDef {
-    fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let FnDef { arg, body, .. } = self;
         let arg_ty = if let Some(typ) = &arg.typ {
-            env.type_env.new_type(typ)?
+            env.new_type(typ)?
         } else {
-            let id = env.type_env.alloc.issue_id();
-            env.type_env.alloc.insert(Type::variable(id));
+            let id = env.alloc.issue_id();
+            env.alloc.insert(Type::variable(id));
             id
         };
-        env.type_env.set_variable(&arg.name, arg_ty);
+        env.set_variable(&arg.name, arg_ty);
         let mut new_non_generic = non_generic.clone();
         new_non_generic.insert(arg_ty);
         let ret_ty = body.infer_type(env, &new_non_generic)?;
-        let fn_ty = env.type_env.alloc.issue_id();
-        env.type_env
-            .alloc
-            .insert(Type::function(fn_ty, arg_ty, ret_ty));
+        let fn_ty = env.alloc.issue_id();
+        env.alloc.insert(Type::function(fn_ty, arg_ty, ret_ty));
         Ok(fn_ty)
     }
 }
 
 impl InferType for Let {
-    fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let Let { typ, value, .. } = self;
         if let Some(type_expr) = typ {
-            env.type_env.alloc.from_sexp(type_expr)
+            env.alloc.from_sexp(type_expr)
         } else {
             let infer_ty = value.infer_type(env, non_generic)?;
             Ok(infer_ty)
@@ -88,20 +85,20 @@ impl InferType for Let {
 }
 
 impl InferType for Expr {
-    fn infer_type(&self, env: &mut InterpreterEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
-                let id = env.type_env.get_variable(name)?.clone();
+                let id = env.get_variable(name)?.clone();
                 let ng = non_generic.iter().cloned().collect::<Vec<_>>();
-                let ret = fresh(&mut env.type_env, id, &ng);
+                let ret = fresh(env, id, &ng);
                 Ok(ret)
             }
             Expr::FnApp(app) => app.infer_type(env, non_generic),
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
         }?;
-        log::debug!("infer_type {} : {}", self, env.type_env.type_name(ret)?);
+        log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
         Ok(ret)
     }
 }
@@ -265,28 +262,28 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::interpreter_env::InterpreterEnv;
     use crate::tests::setup;
     use crate::traits::InferType;
     use anyhow::Result;
     use ast::into_ast::into_ast;
     use std::collections::HashSet;
+    use structural_typesystem::type_env::TypeEnv;
     use symbolic_expressions::parser::parse_str;
 
-    fn should_infer(env: &mut InterpreterEnv, expr: &str, type_expr: &str) -> Result<()> {
+    fn should_infer(env: &mut TypeEnv, expr: &str, type_expr: &str) -> Result<()> {
         setup();
 
         let expected = parse_str(type_expr)?;
         let exp = into_ast(&parse_str(expr)?)?;
         let infer_ty_id = exp.infer_type(env, &HashSet::new())?;
-        let actual = env.type_env.type_name(infer_ty_id)?;
+        let actual = env.type_name(infer_ty_id)?;
         assert_eq!(expected, actual);
         Ok(())
     }
 
     #[test]
     fn test_literal() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         should_infer(&mut env, "true", "bool")?;
         should_infer(&mut env, "1", "int")?;
         should_infer(&mut env, "(record (a : 1))", "(record (a : int))")?;
@@ -295,38 +292,38 @@ mod test {
 
     #[test]
     fn test_lambda() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         should_infer(&mut env, "(lam (x : int) 1)", "(-> int int)")
     }
 
     #[test]
     fn test_app() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         should_infer(&mut env, "(not true)", "bool")
     }
 
     #[test]
     fn test_not() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         should_infer(&mut env, "(lam (x : bool) (not x))", "(-> bool bool)")
     }
 
     #[test]
     fn test_let_app() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         should_infer(&mut env, "(let a (id 1))", "int")
     }
 
     #[test]
     fn test_tvar() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         // should_infer(&mut env, "(id id)", "(-> a a)")
         should_infer(&mut env, "id", "(-> a a)")
     }
 
     #[test]
     fn test_lam_tvar() -> Result<()> {
-        let mut env = InterpreterEnv::default();
+        let mut env = TypeEnv::default();
         should_infer(&mut env, "(lam x (lam y x))", "(-> a (-> b a))")
     }
 }

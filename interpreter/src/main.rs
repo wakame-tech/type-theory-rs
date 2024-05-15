@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     let program = sexps.iter().map(into_ast).collect::<Result<Vec<_>>>()?;
     let mut env = InterpreterEnv::default();
     let program = Program(program);
-    program.type_check(&mut env)?;
+    program.type_check(&mut env.type_env)?;
     let ret = program.eval(&mut env)?;
     println!("{}", &ret);
     Ok(())
