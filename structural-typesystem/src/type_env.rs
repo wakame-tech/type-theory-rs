@@ -22,20 +22,12 @@ pub struct TypeEnv {
     tree: Graph<Id, ()>,
 }
 
-pub fn any() -> TypeExpr {
-    Sexp::String("any".to_string())
-}
-
-pub fn int() -> TypeExpr {
-    Sexp::String("int".to_string())
-}
-
-pub fn bool() -> TypeExpr {
-    Sexp::String("bool".to_string())
-}
-
-pub fn arrow(arg: TypeExpr, ret: TypeExpr) -> TypeExpr {
-    Sexp::List(vec![Sexp::String(FN_TYPE_KEYWORD.to_string()), arg, ret])
+pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
+    Sexp::List(vec![
+        Sexp::String(FN_TYPE_KEYWORD.to_string()),
+        Sexp::List(args),
+        ret,
+    ])
 }
 
 pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
@@ -56,22 +48,11 @@ pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
-
-        let any = env.new_type(&any()).unwrap();
-        let int = env.new_type(&int()).unwrap();
-        let bool = env.new_type(&bool()).unwrap();
+        let any = env.new_type_str("any").unwrap();
+        let int = env.new_type_str("int").unwrap();
+        let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(int, any);
         env.new_subtype(bool, any);
-
-        for (name, ty) in [
-            ("not", "(-> (bool) bool)"),
-            ("id", "(-> (a) a)"),
-            ("+", "(-> (int int) int)"),
-            ("-", "(-> (int int) int)"),
-        ] {
-            let ty = env.new_type(&parse_str(ty).unwrap()).unwrap();
-            env.set_variable(name, ty);
-        }
         env
     }
 }
@@ -160,6 +141,10 @@ impl TypeEnv {
             }
             _ => Err(anyhow::anyhow!("unsupported type: {}", ty)),
         }
+    }
+
+    pub fn new_type_str(&mut self, ty: &str) -> Result<Id> {
+        self.new_type(&parse_str(ty)?)
     }
 
     pub fn set_variable(&mut self, name: &str, ty: Id) {

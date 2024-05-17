@@ -105,17 +105,45 @@ impl Display for Let {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct External(pub String);
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Nil,
+    External(External),
     Bool(bool),
     Number(i64),
     Record(HashMap<String, Expr>),
+}
+
+impl Value {
+    pub fn boolean(&self) -> Result<bool> {
+        match self {
+            Value::Bool(b) => Ok(*b),
+            _ => Err(anyhow::anyhow!("not boolean")),
+        }
+    }
+
+    pub fn number(&self) -> Result<i64> {
+        match self {
+            Value::Number(n) => Ok(*n),
+            _ => Err(anyhow::anyhow!("not number")),
+        }
+    }
+
+    pub fn record(&self) -> Result<&HashMap<String, Expr>> {
+        match self {
+            Value::Record(record) => Ok(record),
+            _ => Err(anyhow::anyhow!("not record")),
+        }
+    }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Nil => write!(f, "nil"),
+            Value::External(External(name)) => write!(f, "external({})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Record(record) => write!(
@@ -148,16 +176,16 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn literal(self) -> Result<Value> {
+    pub fn literal(&self) -> Result<Value> {
         match self {
-            Expr::Literal(literal) => Ok(literal),
+            Expr::Literal(literal) => Ok(literal.clone()),
             _ => Err(anyhow::anyhow!("literal expected")),
         }
     }
 
-    pub fn name(self) -> Result<String> {
+    pub fn name(&self) -> Result<String> {
         match self {
-            Expr::Variable(name) => Ok(name),
+            Expr::Variable(name) => Ok(name.clone()),
             _ => Err(anyhow::anyhow!("variable expected")),
         }
     }

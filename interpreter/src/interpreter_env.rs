@@ -1,5 +1,4 @@
-use crate::scope::Scope;
-use ast::ast::{Expr, Value};
+use crate::{externals::define_externals, scope::Scope};
 use std::{collections::HashMap, fmt::Display};
 use structural_typesystem::type_env::TypeEnv;
 
@@ -13,14 +12,10 @@ pub struct InterpreterEnv {
 
 impl Default for InterpreterEnv {
     fn default() -> Self {
-        let global_type_env = TypeEnv::default();
+        let mut global_type_env = TypeEnv::default();
         let mut scopes = HashMap::new();
         let mut main_scope = Scope::default();
-        for name in ["+", "-"] {
-            main_scope
-                .variables
-                .insert(name.to_string(), Expr::Literal(Value::Nil));
-        }
+        define_externals(&mut global_type_env, &mut main_scope).unwrap();
         scopes.insert(0, main_scope);
         Self {
             current_index: 0,

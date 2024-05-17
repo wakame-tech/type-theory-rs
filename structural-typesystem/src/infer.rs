@@ -4,7 +4,7 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Value};
+use ast::ast::{Expr, External, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use symbolic_expressions::parser::parse_str;
 
@@ -16,6 +16,7 @@ impl InferType for Value {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         match self {
             Value::Nil => env.get(&parse_str("int")?),
+            Value::External(External(name)) => env.get_variable(name),
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
             Value::Record(fields) => {

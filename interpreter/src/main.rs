@@ -7,6 +7,7 @@ use std::{env, fs::File, io::Read};
 use structural_typesystem::type_check::TypeCheck;
 use symbolic_expressions::parser::parse_str;
 
+pub mod externals;
 pub mod interpreter;
 pub mod interpreter_env;
 pub mod scope;

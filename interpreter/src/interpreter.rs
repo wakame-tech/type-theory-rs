@@ -1,6 +1,6 @@
-use crate::interpreter_env::InterpreterEnv;
+use crate::{externals::eval_externals, interpreter_env::InterpreterEnv};
 use anyhow::{anyhow, Ok, Result};
-use ast::ast::{Expr, FnApp, FnDef, Let, Program};
+use ast::ast::{Expr, External, FnApp, FnDef, Let, Program, Value};
 
 pub trait Eval {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr>;
@@ -25,38 +25,29 @@ impl Eval for Let {
 
 impl Eval for FnApp {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
-        log::debug!("FnApp::eval {}", self);
         let f = self.0.eval(env)?;
         let args = self
             .1
             .iter()
             .map(|arg| arg.eval(env))
             .collect::<Result<Vec<_>>>()?;
-        let f = match f {
-            Expr::Variable(name) => {
-                match name.as_str() {
-                    "+" => todo!(),
-                    "-" => todo!(),
-                    _ => {}
-                }
-                if let Expr::FnDef(fn_def) = env.current().get(&name)?.clone() {
-                    Ok(fn_def)
-                } else {
-                    Err(anyhow!("{} is cannot apply", name))
-                }
-            }
-            Expr::FnDef(def) => Ok(def),
-            expr => Err(anyhow!("{} cannot apply", expr)),
-        }?;
 
+        let f = if let Expr::Variable(name) = f {
+            env.current().get(&name)?.clone()
+        } else {
+            f
+        };
+        let Expr::FnDef(def) = f else {
+            return Err(anyhow!("{} is cannot apply", f));
+        };
         let scope = env.current().clone();
         let scope = env.new_scope(scope);
-        for (param, arg) in f.args.iter().zip(args.iter()) {
+        for (param, arg) in def.args.iter().zip(args.iter()) {
             scope.insert(&param.name, arg.clone());
-            log::debug!("@#{} bind {} = {}", scope.id, &param.name, arg);
+            // log::debug!("@#{} bind {} = {}", scope.id, &param.name, arg);
         }
-        let res = f.body.eval(env)?;
-        log::debug!("FnApp::eval {} {:?} = {}", f, args, res);
+        let res = def.body.eval(env)?;
+        // log::debug!("FnApp::eval {} {:?} = {}", def, args, res);
         env.pop_scope();
         Ok(res)
     }
@@ -68,11 +59,12 @@ impl Eval for Expr {
             Expr::FnDef(fndef) => fndef.eval(env),
             Expr::Let(r#let) => r#let.eval(env),
             Expr::FnApp(fnapp) => fnapp.eval(env),
+            Expr::Literal(Value::External(External(name))) => eval_externals(env.current(), name),
             Expr::Literal(lit) => Ok(Expr::Literal(lit.clone())),
             Expr::Variable(var) => Ok(env.current().get(var)?.clone()),
-        };
-        log::debug!("eval scope={} {}", env.current(), self);
-        ret
+        }?;
+        log::debug!("eval {} = {}", self, ret);
+        Ok(ret)
     }
 }
 
