@@ -90,7 +90,6 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             _ => parse_apply(&list[0], &list[1..]),
         },
         Sexp::String(lit) => match lit.as_str() {
-            "nil" => Ok(Expr::Literal(Value::Nil)),
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
             _ => Ok(Expr::Variable(lit.to_string())),
@@ -112,11 +111,6 @@ mod tests {
         let ast = into_ast(&sexp).unwrap();
         assert_eq!(&ast, expected);
         Ok(())
-    }
-
-    #[test]
-    fn nil_literal() -> Result<()> {
-        should_be_ast("nil", &Expr::Literal(Value::Nil))
     }
 
     #[test]
