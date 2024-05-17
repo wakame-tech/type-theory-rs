@@ -29,6 +29,11 @@ impl Eval for FnApp {
         let (f, arg) = (self.0.eval(env)?, self.1.eval(env)?);
         let f = match f {
             Expr::Variable(name) => {
+                match name.as_str() {
+                    "+" => todo!(),
+                    "-" => todo!(),
+                    _ => {}
+                }
                 if let Expr::FnDef(fn_def) = env.current().get(&name)?.clone() {
                     Ok(fn_def)
                 } else {

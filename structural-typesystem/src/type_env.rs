@@ -63,16 +63,15 @@ impl Default for TypeEnv {
         env.new_subtype(int, any);
         env.new_subtype(bool, any);
 
-        let not_id = env.new_type(&parse_str("(-> bool bool)").unwrap()).unwrap();
-        let id_id = env.new_type(&parse_str("(-> a a)").unwrap()).unwrap();
-        let plus_id = env
-            .new_type(&parse_str("(-> int (-> int int))").unwrap())
-            .unwrap();
-        env.variables = HashMap::from_iter(vec![
-            ("not".to_string(), not_id),
-            ("id".to_string(), id_id),
-            ("+".to_string(), plus_id),
-        ]);
+        for (name, ty) in [
+            ("not", "(-> bool bool)"),
+            ("id", "(-> a a)"),
+            ("+", "(-> int (-> int int))"),
+            ("-", "(-> int (-> int int))"),
+        ] {
+            let ty = env.new_type(&parse_str(ty).unwrap()).unwrap();
+            env.set_variable(name, ty);
+        }
         env
     }
 }
