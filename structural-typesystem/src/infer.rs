@@ -310,9 +310,9 @@ mod test {
     }
 
     #[test]
-    fn test_lambda() -> Result<()> {
+    fn test_fn() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(lam (x : int) 1)", "(-> (int) int)")
+        should_infer(&mut env, "(fn (x : int) 1)", "(-> (int) int)")
     }
 
     #[test]
@@ -324,7 +324,7 @@ mod test {
     #[test]
     fn test_not() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(lam (x : bool) (not x))", "(-> (bool) bool)")
+        should_infer(&mut env, "(fn (x : bool) (not x))", "(-> (bool) bool)")
     }
 
     #[test]
@@ -340,8 +340,8 @@ mod test {
     }
 
     #[test]
-    fn test_lam_tvar() -> Result<()> {
+    fn test_fn_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(lam x y x)", "(-> (a b) a))")
+        should_infer(&mut env, "(fn x y x)", "(-> (a b) a))")
     }
 }

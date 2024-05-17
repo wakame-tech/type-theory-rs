@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use symbolic_expressions::Sexp;
 
 pub const LET_KEYWORD: &str = "let";
-pub const LAMBDA_KEYWORD: &str = "lam";
+pub const FN_KEYWORD: &str = "fn";
 pub const RECORD_KEYWORD: &str = "record";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
@@ -24,8 +24,8 @@ fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     }
 }
 
-/// (lam (x : int) x)
-fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
+/// (fn (x : int) x)
+fn parse_fn(list: &[Sexp]) -> Result<Expr> {
     let params = list[1..list.len() - 1]
         .iter()
         .map(parse_parameter)
@@ -82,8 +82,8 @@ fn is_number(s: &str) -> bool {
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
     match sexp {
         Sexp::List(list) => match list[0] {
-            Sexp::String(ref lam) if lam == LAMBDA_KEYWORD => parse_lambda(list),
-            Sexp::String(ref lt) if lt == LET_KEYWORD => parse_let(sexp),
+            Sexp::String(ref head) if head == FN_KEYWORD => parse_fn(list),
+            Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
@@ -182,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn lam() -> Result<()> {
+    fn fn_def() -> Result<()> {
         let fn_def = Expr::FnDef(FnDef::new(
             vec![Parameter::new(
                 "x".to_string(),
@@ -190,16 +190,16 @@ mod tests {
             )],
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam (x : int) x)", &fn_def)
+        should_be_ast("(fn (x : int) x)", &fn_def)
     }
 
     #[test]
-    fn lam_wo_anno() -> Result<()> {
+    fn fn_wo_anno() -> Result<()> {
         let fn_def = Expr::FnDef(FnDef::new(
             vec![Parameter::new("x".to_string(), None)],
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam x x)", &fn_def)
+        should_be_ast("(fn x x)", &fn_def)
     }
 
     #[test]

@@ -23,16 +23,16 @@ fn main() -> Result<()> {
     let mut f = File::open(ml_path)?;
     let mut program = String::new();
     f.read_to_string(&mut program)?;
-    let sexps = program
-        .split('\n')
-        .filter(|line| !line.is_empty())
-        .map(|line| parse_str(line).map_err(|e| anyhow::anyhow!("{:?}", e)))
+    let program = parse_str(&format!("({})", program))?
+        .list()?
+        .into_iter()
+        .map(into_ast)
         .collect::<Result<Vec<_>>>()?;
-
-    let program = sexps.iter().map(into_ast).collect::<Result<Vec<_>>>()?;
-    let mut env = InterpreterEnv::default();
     let program = Program(program);
+
+    let mut env = InterpreterEnv::default();
     program.type_check(&mut env.type_env)?;
+
     let ret = program.eval(&mut env)?;
     println!("{}", &ret);
     Ok(())
