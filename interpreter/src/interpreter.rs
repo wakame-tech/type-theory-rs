@@ -26,7 +26,12 @@ impl Eval for Let {
 impl Eval for FnApp {
     fn eval(&self, env: &mut InterpreterEnv) -> Result<Expr> {
         log::debug!("FnApp::eval {}", self);
-        let (f, arg) = (self.0.eval(env)?, self.1.eval(env)?);
+        let f = self.0.eval(env)?;
+        let args = self
+            .1
+            .iter()
+            .map(|arg| arg.eval(env))
+            .collect::<Result<Vec<_>>>()?;
         let f = match f {
             Expr::Variable(name) => {
                 match name.as_str() {
@@ -46,10 +51,12 @@ impl Eval for FnApp {
 
         let scope = env.current().clone();
         let scope = env.new_scope(scope);
-        scope.insert(&f.arg.name, arg.clone());
-        log::debug!("@#{} bind {} = {}", scope.id, f.arg.name, arg);
+        for (param, arg) in f.args.iter().zip(args.iter()) {
+            scope.insert(&param.name, arg.clone());
+            log::debug!("@#{} bind {} = {}", scope.id, &param.name, arg);
+        }
         let res = f.body.eval(env)?;
-        log::debug!("FnApp::eval {} {} = {}", f, arg, res);
+        log::debug!("FnApp::eval {} {:?} = {}", f, args, res);
         env.pop_scope();
         Ok(res)
     }

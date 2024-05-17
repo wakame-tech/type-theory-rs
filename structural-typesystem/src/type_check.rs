@@ -24,17 +24,24 @@ fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
 
 impl TypeCheck for FnDef {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let arg_ty = if let Some(arg_ty) = &self.arg.typ {
-            env.new_type(arg_ty)?
-        } else {
-            let id = env.alloc.issue_id();
-            env.alloc.insert(Type::variable(id));
-            id
-        };
-        env.set_variable(&self.arg.name, arg_ty);
+        let arg_tys = self
+            .args
+            .iter()
+            .map(|arg| {
+                let arg_ty = if let Some(arg_ty) = &arg.typ {
+                    env.new_type(arg_ty)?
+                } else {
+                    let id = env.alloc.issue_id();
+                    env.alloc.insert(Type::variable(id));
+                    id
+                };
+                env.set_variable(&arg.name, arg_ty);
+                Ok(arg_ty)
+            })
+            .collect::<Result<Vec<_>>>()?;
         let ret_ty = self.body.type_check(env)?;
         let fn_ty = env.alloc.issue_id();
-        env.alloc.insert(Type::function(fn_ty, arg_ty, ret_ty));
+        env.alloc.insert(Type::function(fn_ty, arg_tys, ret_ty));
         Ok(fn_ty)
     }
 }
@@ -61,14 +68,15 @@ impl TypeCheck for FnApp {
     /// v :: a
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         let f_ty = self.0.type_check(env)?;
-        let Type::Function { arg, ret, .. } = env.alloc.get(f_ty)? else {
+        let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
-        let param_ty = self.1.type_check(env)?;
-
-        // if `arg_ty` is generic, skip subtype check
-        if !env.alloc.is_generic(arg)? {
-            ensure_subtype(env, param_ty, arg)?;
+        for (value, arg) in self.1.iter().zip(args.iter()) {
+            let param_ty = value.type_check(env)?;
+            // if `arg_ty` is generic, skip subtype check
+            if !env.alloc.is_generic(*arg)? {
+                ensure_subtype(env, param_ty, *arg)?;
+            }
         }
         Ok(ret)
     }

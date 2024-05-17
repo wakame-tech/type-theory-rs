@@ -64,10 +64,10 @@ impl Default for TypeEnv {
         env.new_subtype(bool, any);
 
         for (name, ty) in [
-            ("not", "(-> bool bool)"),
-            ("id", "(-> a a)"),
-            ("+", "(-> int (-> int int))"),
-            ("-", "(-> int (-> int int))"),
+            ("not", "(-> (bool) bool)"),
+            ("id", "(-> (a) a)"),
+            ("+", "(-> (int int) int)"),
+            ("-", "(-> (int int) int)"),
         ] {
             let ty = env.new_type(&parse_str(ty).unwrap()).unwrap();
             env.set_variable(name, ty);
@@ -130,9 +130,14 @@ impl TypeEnv {
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
-                let (arg, ret) = (self.new_type(&list[1])?, self.new_type(&list[2])?);
+                let args = list[1]
+                    .list()?
+                    .iter()
+                    .map(|s| self.new_type(s))
+                    .collect::<Result<Vec<_>>>()?;
+                let ret = self.new_type(&list[2])?;
                 let id = self.alloc.issue_id();
-                self.alloc.insert(Type::function(id, arg, ret));
+                self.alloc.insert(Type::function(id, args, ret));
                 self.register_type_id(ty, id);
                 Ok(id)
             }

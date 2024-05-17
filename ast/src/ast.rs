@@ -29,35 +29,53 @@ impl Display for Parameter {
 
 /// (f a)
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnApp(pub Box<Expr>, pub Box<Expr>);
+pub struct FnApp(pub Box<Expr>, pub Vec<Box<Expr>>);
 
 impl FnApp {
-    pub fn new(f: Expr, value: Expr) -> Self {
-        Self(Box::new(f), Box::new(value))
+    pub fn new(f: Expr, values: Vec<Expr>) -> Self {
+        Self(Box::new(f), values.into_iter().map(Box::new).collect())
     }
 }
 
 impl Display for FnApp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({} {})", self.0, self.1)
+        write!(
+            f,
+            "({} {})",
+            self.0,
+            self.1
+                .iter()
+                .map(|v| format!("{}", v))
+                .collect::<Vec<String>>()
+                .join(" ")
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    pub arg: Parameter,
+    pub args: Vec<Parameter>,
     pub body: Box<Expr>,
 }
 
 impl FnDef {
-    pub fn new(arg: Parameter, body: Box<Expr>) -> Self {
-        Self { arg, body }
+    pub fn new(args: Vec<Parameter>, body: Box<Expr>) -> Self {
+        Self { args, body }
     }
 }
 
 impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) -> {}", self.arg, self.body)
+        write!(
+            f,
+            "({}) -> {}",
+            self.args
+                .iter()
+                .map(|a| format!("{}", a))
+                .collect::<Vec<String>>()
+                .join(" "),
+            self.body
+        )
     }
 }
 

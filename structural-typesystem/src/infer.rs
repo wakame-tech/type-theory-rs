@@ -35,19 +35,22 @@ impl InferType for Value {
 
 impl InferType for FnApp {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
-        let FnApp(f, v) = self;
+        let FnApp(f, vs) = self;
         let fn_ty = f.infer_type(env, non_generic)?;
-        let arg_ty_id = v.infer_type(env, non_generic)?;
+        let arg_ty_ids = vs
+            .iter()
+            .map(|v| v.infer_type(env, non_generic))
+            .collect::<Result<Vec<_>>>()?;
         let ret_ty_id = env.alloc.issue_id();
         env.alloc.insert(Type::variable(ret_ty_id));
         let new_fn_ty = env.alloc.issue_id();
         env.alloc
-            .insert(Type::function(new_fn_ty, arg_ty_id, ret_ty_id));
+            .insert(Type::function(new_fn_ty, arg_ty_ids.clone(), ret_ty_id));
         log::debug!(
-            "#{} = ? -> ? vs #{} = #{} -> #{}",
+            "#{} = ? -> ? vs #{} = #{:?} -> #{}",
             fn_ty,
             new_fn_ty,
-            arg_ty_id,
+            arg_ty_ids,
             ret_ty_id
         );
         unify(env, new_fn_ty, fn_ty)?;
@@ -57,20 +60,26 @@ impl InferType for FnApp {
 
 impl InferType for FnDef {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
-        let FnDef { arg, body, .. } = self;
-        let arg_ty = if let Some(typ) = &arg.typ {
-            env.new_type(typ)?
-        } else {
-            let id = env.alloc.issue_id();
-            env.alloc.insert(Type::variable(id));
-            id
-        };
-        env.set_variable(&arg.name, arg_ty);
+        let FnDef { args, body, .. } = self;
+        let arg_tys = args
+            .iter()
+            .map(|arg| {
+                let arg_ty = if let Some(typ) = &arg.typ {
+                    env.new_type(typ)?
+                } else {
+                    let id = env.alloc.issue_id();
+                    env.alloc.insert(Type::variable(id));
+                    id
+                };
+                env.set_variable(&arg.name, arg_ty);
+                Ok(arg_ty)
+            })
+            .collect::<Result<Vec<_>>>()?;
         let mut new_non_generic = non_generic.clone();
-        new_non_generic.insert(arg_ty);
+        new_non_generic.extend(arg_tys.iter());
         let ret_ty = body.infer_type(env, &new_non_generic)?;
         let fn_ty = env.alloc.issue_id();
-        env.alloc.insert(Type::function(fn_ty, arg_ty, ret_ty));
+        env.alloc.insert(Type::function(fn_ty, arg_tys, ret_ty));
         Ok(fn_ty)
     }
 }
@@ -122,8 +131,10 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
             }
         }
         Type::Primitive { id, .. } => id,
-        Type::Function { id, arg, ret } => {
-            fresh_rec(env, arg, mappings, non_generic);
+        Type::Function { id, args, ret } => {
+            for arg in args {
+                fresh_rec(env, arg, mappings, non_generic);
+            }
             fresh_rec(env, ret, mappings, non_generic);
             id
         }
@@ -175,20 +186,24 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
         // unify fn type
         (
             Type::Function {
-                arg: a_arg,
+                args: a_args,
                 ret: a_ret,
                 ..
             },
             Type::Function {
-                arg: b_arg,
+                args: b_args,
                 ret: b_ret,
                 ..
             },
         ) => {
-            let arg = unify(env, *a_arg, *b_arg)?;
+            let args = a_args
+                .iter()
+                .zip(b_args.iter())
+                .map(|(a_arg, b_arg)| unify(env, *a_arg, *b_arg))
+                .collect::<Result<Vec<_>>>()?;
             let ret = unify(env, *a_ret, *b_ret)?;
             let id = env.alloc.issue_id();
-            env.alloc.insert(Type::function(id, arg, ret));
+            env.alloc.insert(Type::function(id, args, ret));
             Ok(id)
         }
         (
@@ -248,7 +263,14 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
     }
     match alloc.get(prune_t).unwrap().clone() {
         Type::Primitive { id, .. } => occurs_in(alloc, id, &[]),
-        Type::Function { arg, ret, .. } => occurs_in(alloc, v, &[arg, ret]),
+        Type::Function { args, ret, .. } => {
+            let args_ret = args
+                .iter()
+                .cloned()
+                .chain(std::iter::once(ret))
+                .collect::<Vec<_>>();
+            occurs_in(alloc, v, &args_ret)
+        }
         Type::Record { fields, .. } => occurs_in(
             alloc,
             v,
@@ -289,7 +311,7 @@ mod test {
     #[test]
     fn test_lambda() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(lam (x : int) 1)", "(-> int int)")
+        should_infer(&mut env, "(lam (x : int) 1)", "(-> (int) int)")
     }
 
     #[test]
@@ -301,7 +323,7 @@ mod test {
     #[test]
     fn test_not() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(lam (x : bool) (not x))", "(-> bool bool)")
+        should_infer(&mut env, "(lam (x : bool) (not x))", "(-> (bool) bool)")
     }
 
     #[test]
@@ -313,13 +335,12 @@ mod test {
     #[test]
     fn test_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        // should_infer(&mut env, "(id id)", "(-> a a)")
-        should_infer(&mut env, "id", "(-> a a)")
+        should_infer(&mut env, "id", "(-> (a) a)")
     }
 
     #[test]
     fn test_lam_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(lam x (lam y x))", "(-> a (-> b a))")
+        should_infer(&mut env, "(lam x y x)", "(-> (a b) a))")
     }
 }
