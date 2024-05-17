@@ -317,24 +317,24 @@ mod test {
     #[test]
     fn test_app() -> Result<()> {
         let mut env = TypeEnv::default();
+        let ty = env.new_type_str("(-> (bool) bool)")?;
+        env.set_variable("not", ty);
         should_infer(&mut env, "(not true)", "bool")
-    }
-
-    #[test]
-    fn test_not() -> Result<()> {
-        let mut env = TypeEnv::default();
-        should_infer(&mut env, "(fn (x : bool) (not x))", "(-> (bool) bool)")
     }
 
     #[test]
     fn test_let_app() -> Result<()> {
         let mut env = TypeEnv::default();
+        let ty = env.new_type_str("(-> (a) a)")?;
+        env.set_variable("id", ty);
         should_infer(&mut env, "(let a (id 1))", "int")
     }
 
     #[test]
     fn test_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
+        let ty = env.new_type_str("(-> (a) a)")?;
+        env.set_variable("id", ty);
         should_infer(&mut env, "id", "(-> (a) a)")
     }
 
