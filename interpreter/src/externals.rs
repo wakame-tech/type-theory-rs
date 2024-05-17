@@ -1,10 +1,10 @@
-use crate::scope::Scope;
+use crate::environment::Environment;
 use anyhow::Result;
 use ast::ast::{Expr, External, FnDef, Parameter, Value};
 use structural_typesystem::type_env::{arrow, TypeEnv};
 use symbolic_expressions::parser::parse_str;
 
-pub fn define_externals(type_env: &mut TypeEnv, scope: &mut Scope) -> Result<()> {
+pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result<()> {
     let int = || parse_str("int").unwrap();
     let bool = || parse_str("bool").unwrap();
 
@@ -27,60 +27,61 @@ pub fn define_externals(type_env: &mut TypeEnv, scope: &mut Scope) -> Result<()>
                 .collect(),
             Box::new(Expr::Literal(Value::External(External(name.to_string())))),
         ));
-        scope.variables.insert(name.to_string(), def);
+        env.variables.insert(name.to_string(), def);
     }
     Ok(())
 }
 
-pub fn eval_externals(scope: &Scope, name: &str) -> Result<Expr> {
-    match name {
-        "dbg" => a_dbg(scope),
-        "id" => a_id(scope),
-        "+" => number_plus(scope),
-        "-" => number_minus(scope),
-        "not" => bool_not(scope),
-        "==" => number_eq(scope),
-        "!=" => number_neq(scope),
+pub fn eval_externals(env: Environment, name: &str) -> Result<(Expr, Environment)> {
+    let res = match name {
+        "dbg" => a_dbg(&env),
+        "id" => a_id(&env),
+        "+" => number_plus(&env),
+        "-" => number_minus(&env),
+        "not" => bool_not(&env),
+        "==" => number_eq(&env),
+        "!=" => number_neq(&env),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
-    }
+    }?;
+    Ok((res, env))
 }
 
-fn a_dbg(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?;
+fn a_dbg(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?;
     println!("{}", a);
     Ok(a.clone())
 }
 
-fn a_id(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?;
+fn a_id(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?;
     Ok(a.clone())
 }
 
-fn number_plus(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?.literal()?.number()?;
-    let b = scope.get("b")?.literal()?.number()?;
+fn number_plus(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.number()?;
+    let b = env.get("b")?.literal()?.number()?;
     Ok(Expr::Literal(Value::Number(a + b)))
 }
 
-fn number_minus(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?.literal()?.number()?;
-    let b = scope.get("b")?.literal()?.number()?;
+fn number_minus(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.number()?;
+    let b = env.get("b")?.literal()?.number()?;
     Ok(Expr::Literal(Value::Number(a - b)))
 }
 
-fn number_eq(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?.literal()?.number()?;
-    let b = scope.get("b")?.literal()?.number()?;
+fn number_eq(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.number()?;
+    let b = env.get("b")?.literal()?.number()?;
     Ok(Expr::Literal(Value::Bool(a == b)))
 }
 
-fn number_neq(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?.literal()?.number()?;
-    let b = scope.get("b")?.literal()?.number()?;
+fn number_neq(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.number()?;
+    let b = env.get("b")?.literal()?.number()?;
     Ok(Expr::Literal(Value::Bool(a != b)))
 }
 
-fn bool_not(scope: &Scope) -> Result<Expr> {
-    let a = scope.get("a")?.literal()?.boolean()?;
+fn bool_not(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.boolean()?;
     Ok(Expr::Literal(Value::Bool(!a)))
 }

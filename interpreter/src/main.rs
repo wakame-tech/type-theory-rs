@@ -1,16 +1,23 @@
-use crate::interpreter::Eval;
+use crate::{environment::Environment, eval::Eval, externals::define_externals};
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
-use interpreter_env::InterpreterEnv;
 use simple_logger::SimpleLogger;
 use std::{env, fs::File, io::Read};
-use structural_typesystem::type_check::TypeCheck;
+use structural_typesystem::{type_check::TypeCheck, type_env::TypeEnv};
 use symbolic_expressions::parser::parse_str;
 
+pub mod environment;
+pub mod eval;
 pub mod externals;
-pub mod interpreter;
-pub mod interpreter_env;
-pub mod scope;
+
+fn parse(program: &str) -> Result<Program> {
+    let program = parse_str(&format!("({})", program))?
+        .list()?
+        .into_iter()
+        .map(into_ast)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Program(program))
+}
 
 fn main() -> Result<()> {
     SimpleLogger::new()
@@ -23,17 +30,15 @@ fn main() -> Result<()> {
     let mut f = File::open(ml_path)?;
     let mut program = String::new();
     f.read_to_string(&mut program)?;
-    let program = parse_str(&format!("({})", program))?
-        .list()?
-        .into_iter()
-        .map(into_ast)
-        .collect::<Result<Vec<_>>>()?;
-    let program = Program(program);
 
-    let mut env = InterpreterEnv::default();
-    program.type_check(&mut env.type_env)?;
+    let program = parse(&program)?;
 
-    let ret = program.eval(&mut env)?;
+    let mut type_env = TypeEnv::default();
+    let mut env = Environment::new(None);
+    define_externals(&mut type_env, &mut env).unwrap();
+
+    program.type_check(&mut type_env)?;
+    let (ret, _) = program.eval(&mut type_env, env)?;
     println!("{}", &ret);
     Ok(())
 }
