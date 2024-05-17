@@ -29,35 +29,53 @@ impl Display for Parameter {
 
 /// (f a)
 #[derive(Debug, Clone, PartialEq)]
-pub struct FnApp(pub Box<Expr>, pub Box<Expr>);
+pub struct FnApp(pub Box<Expr>, pub Vec<Box<Expr>>);
 
 impl FnApp {
-    pub fn new(f: Expr, value: Expr) -> Self {
-        Self(Box::new(f), Box::new(value))
+    pub fn new(f: Expr, values: Vec<Expr>) -> Self {
+        Self(Box::new(f), values.into_iter().map(Box::new).collect())
     }
 }
 
 impl Display for FnApp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({} {})", self.0, self.1)
+        write!(
+            f,
+            "({} {})",
+            self.0,
+            self.1
+                .iter()
+                .map(|v| format!("{}", v))
+                .collect::<Vec<String>>()
+                .join(" ")
+        )
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FnDef {
-    pub arg: Parameter,
+    pub args: Vec<Parameter>,
     pub body: Box<Expr>,
 }
 
 impl FnDef {
-    pub fn new(arg: Parameter, body: Box<Expr>) -> Self {
-        Self { arg, body }
+    pub fn new(args: Vec<Parameter>, body: Box<Expr>) -> Self {
+        Self { args, body }
     }
 }
 
 impl Display for FnDef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}) -> {}", self.arg, self.body)
+        write!(
+            f,
+            "({}) -> {}",
+            self.args
+                .iter()
+                .map(|a| format!("{}", a))
+                .collect::<Vec<String>>()
+                .join(" "),
+            self.body
+        )
     }
 }
 
@@ -87,17 +105,43 @@ impl Display for Let {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct External(pub String);
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Nil,
+    External(External),
     Bool(bool),
     Number(i64),
     Record(HashMap<String, Expr>),
 }
 
+impl Value {
+    pub fn boolean(&self) -> Result<bool> {
+        match self {
+            Value::Bool(b) => Ok(*b),
+            _ => Err(anyhow::anyhow!("not boolean")),
+        }
+    }
+
+    pub fn number(&self) -> Result<i64> {
+        match self {
+            Value::Number(n) => Ok(*n),
+            _ => Err(anyhow::anyhow!("not number")),
+        }
+    }
+
+    pub fn record(&self) -> Result<&HashMap<String, Expr>> {
+        match self {
+            Value::Record(record) => Ok(record),
+            _ => Err(anyhow::anyhow!("not record")),
+        }
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Nil => write!(f, "nil"),
+            Value::External(External(name)) => write!(f, "external({})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::Record(record) => write!(
@@ -130,16 +174,16 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn literal(self) -> Result<Value> {
+    pub fn literal(&self) -> Result<Value> {
         match self {
-            Expr::Literal(literal) => Ok(literal),
+            Expr::Literal(literal) => Ok(literal.clone()),
             _ => Err(anyhow::anyhow!("literal expected")),
         }
     }
 
-    pub fn name(self) -> Result<String> {
+    pub fn name(&self) -> Result<String> {
         match self {
-            Expr::Variable(name) => Ok(name),
+            Expr::Variable(name) => Ok(name.clone()),
             _ => Err(anyhow::anyhow!("variable expected")),
         }
     }

@@ -4,31 +4,21 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
-pub struct Scope {
-    pub id: usize,
+pub struct Environment {
     pub variables: HashMap<String, Expr>,
-    pub parent: Option<usize>,
+    pub parent: Option<Box<Environment>>,
 }
 
-impl Default for Scope {
-    fn default() -> Self {
-        Scope {
-            id: 0,
+impl Environment {
+    pub fn new(parent: Option<Box<Environment>>) -> Self {
+        Self {
             variables: HashMap::new(),
-            parent: None,
+            parent,
         }
     }
-}
 
-impl Scope {
     pub fn insert(&mut self, name: &str, expr: Expr) {
         self.variables.insert(name.to_string(), expr);
-    }
-
-    pub fn get_mut(&mut self, name: &str) -> Result<&mut Expr> {
-        self.variables
-            .get_mut(name)
-            .ok_or(anyhow!("variable {} not found", name))
     }
 
     pub fn get(&self, name: &str) -> Result<&Expr> {
@@ -38,11 +28,13 @@ impl Scope {
     }
 }
 
-impl Display for Scope {
+impl Display for Environment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Scope#{} parent={:?}", self.id, self.parent)?;
         for (name, expr) in &self.variables {
-            writeln!(f, "{} = {}", name, expr)?;
+            writeln!(f, "  {} = {}", name, expr)?;
+        }
+        if let Some(parent) = &self.parent {
+            writeln!(f, "parent:\n{}", parent)?;
         }
         Ok(())
     }

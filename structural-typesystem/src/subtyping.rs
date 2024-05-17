@@ -43,16 +43,16 @@ impl TypeEnv {
             // fn types
             (
                 Type::Function {
-                    arg: a_arg,
+                    args: a_args,
                     ret: a_ret,
                     ..
                 },
                 Type::Function {
-                    arg: b_arg,
+                    args: b_args,
                     ret: b_ret,
                     ..
                 },
-            ) => self.is_subtype_vec(vec![a_arg, a_ret], vec![b_arg, b_ret]),
+            ) => Ok(self.is_subtype_vec(a_args, b_args)? && self.is_subtype(a_ret, b_ret)?),
             // record types
             (
                 Type::Record {
@@ -94,8 +94,8 @@ mod test {
     #[test]
     fn test_type_cmp_2() -> Result<()> {
         let mut env = TypeEnv::default();
-        let int_int = env.new_type(&parse_str("(-> int int)")?)?;
-        let any_int = env.new_type(&parse_str("(-> any int)")?)?;
+        let int_int = env.new_type(&parse_str("(-> (int) int)")?)?;
+        let any_int = env.new_type(&parse_str("(-> (any) int)")?)?;
         assert!(
             env.is_subtype(int_int, any_int)?,
             "int -> int <= int -> any"
@@ -107,7 +107,7 @@ mod test {
     fn test_type_cmp_3() -> Result<()> {
         let mut env = TypeEnv::default();
         let any = env.new_type(&parse_str("any")?)?;
-        let int_int = env.new_type(&parse_str("(-> int int)")?)?;
+        let int_int = env.new_type(&parse_str("(-> (int) int)")?)?;
         assert!(env.is_subtype(int_int, any)?, "int -> int <= any");
         Ok(())
     }

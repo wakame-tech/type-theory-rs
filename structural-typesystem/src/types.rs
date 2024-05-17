@@ -19,7 +19,7 @@ pub enum Type {
     },
     Function {
         id: Id,
-        arg: Id,
+        args: Vec<Id>,
         ret: Id,
     },
     Record {
@@ -58,8 +58,8 @@ impl Type {
         }
     }
 
-    pub fn function(id: Id, arg: Id, ret: Id) -> Self {
-        Type::Function { id, arg, ret }
+    pub fn function(id: Id, args: Vec<Id>, ret: Id) -> Self {
+        Type::Function { id, args, ret }
     }
 
     pub fn record(id: Id, fields: BTreeMap<String, Id>) -> Self {

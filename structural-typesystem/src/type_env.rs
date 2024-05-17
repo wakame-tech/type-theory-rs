@@ -22,20 +22,12 @@ pub struct TypeEnv {
     tree: Graph<Id, ()>,
 }
 
-pub fn any() -> TypeExpr {
-    Sexp::String("any".to_string())
-}
-
-pub fn int() -> TypeExpr {
-    Sexp::String("int".to_string())
-}
-
-pub fn bool() -> TypeExpr {
-    Sexp::String("bool".to_string())
-}
-
-pub fn arrow(arg: TypeExpr, ret: TypeExpr) -> TypeExpr {
-    Sexp::List(vec![Sexp::String(FN_TYPE_KEYWORD.to_string()), arg, ret])
+pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
+    Sexp::List(vec![
+        Sexp::String(FN_TYPE_KEYWORD.to_string()),
+        Sexp::List(args),
+        ret,
+    ])
 }
 
 pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
@@ -56,23 +48,11 @@ pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
-
-        let any = env.new_type(&any()).unwrap();
-        let int = env.new_type(&int()).unwrap();
-        let bool = env.new_type(&bool()).unwrap();
+        let any = env.new_type_str("any").unwrap();
+        let int = env.new_type_str("int").unwrap();
+        let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(int, any);
         env.new_subtype(bool, any);
-
-        let not_id = env.new_type(&parse_str("(-> bool bool)").unwrap()).unwrap();
-        let id_id = env.new_type(&parse_str("(-> a a)").unwrap()).unwrap();
-        let plus_id = env
-            .new_type(&parse_str("(-> int (-> int int))").unwrap())
-            .unwrap();
-        env.variables = HashMap::from_iter(vec![
-            ("not".to_string(), not_id),
-            ("id".to_string(), id_id),
-            ("+".to_string(), plus_id),
-        ]);
         env
     }
 }
@@ -131,9 +111,14 @@ impl TypeEnv {
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
-                let (arg, ret) = (self.new_type(&list[1])?, self.new_type(&list[2])?);
+                let args = list[1]
+                    .list()?
+                    .iter()
+                    .map(|s| self.new_type(s))
+                    .collect::<Result<Vec<_>>>()?;
+                let ret = self.new_type(&list[2])?;
                 let id = self.alloc.issue_id();
-                self.alloc.insert(Type::function(id, arg, ret));
+                self.alloc.insert(Type::function(id, args, ret));
                 self.register_type_id(ty, id);
                 Ok(id)
             }
@@ -156,6 +141,10 @@ impl TypeEnv {
             }
             _ => Err(anyhow::anyhow!("unsupported type: {}", ty)),
         }
+    }
+
+    pub fn new_type_str(&mut self, ty: &str) -> Result<Id> {
+        self.new_type(&parse_str(ty)?)
     }
 
     pub fn set_variable(&mut self, name: &str, ty: Id) {

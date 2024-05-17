@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use symbolic_expressions::Sexp;
 
 pub const LET_KEYWORD: &str = "let";
-pub const LAMBDA_KEYWORD: &str = "lam";
+pub const FN_KEYWORD: &str = "fn";
 pub const RECORD_KEYWORD: &str = "record";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
@@ -24,11 +24,14 @@ fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     }
 }
 
-/// (lam (x : int) x)
-fn parse_lambda(list: &[Sexp]) -> Result<Expr> {
-    let param = parse_parameter(&list[1])?;
-    let body = Box::new(into_ast(&list[2])?);
-    Ok(Expr::FnDef(FnDef::new(param, body)))
+/// (fn (x : int) x)
+fn parse_fn(list: &[Sexp]) -> Result<Expr> {
+    let params = list[1..list.len() - 1]
+        .iter()
+        .map(parse_parameter)
+        .collect::<Result<Vec<_>>>()?;
+    let body = Box::new(into_ast(&list[list.len() - 1])?);
+    Ok(Expr::FnDef(FnDef::new(params, body)))
 }
 
 fn parse_let(sexp: &Sexp) -> Result<Expr> {
@@ -54,8 +57,9 @@ fn parse_let(sexp: &Sexp) -> Result<Expr> {
 }
 
 /// (f g h) -> ((f g) h)
-fn parse_apply(f: &Sexp, v: &Sexp) -> Result<Expr> {
-    let (f, v) = (into_ast(f)?, into_ast(v)?);
+fn parse_apply(f: &Sexp, values: &[Sexp]) -> Result<Expr> {
+    let f = into_ast(f)?;
+    let v = values.iter().map(into_ast).collect::<Result<Vec<_>>>()?;
     Ok(Expr::FnApp(FnApp::new(f, v)))
 }
 
@@ -78,16 +82,14 @@ fn is_number(s: &str) -> bool {
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
     match sexp {
         Sexp::List(list) => match list[0] {
-            Sexp::String(ref lam) if lam == LAMBDA_KEYWORD => parse_lambda(list),
-            Sexp::String(ref lt) if lt == LET_KEYWORD => parse_let(sexp),
+            Sexp::String(ref head) if head == FN_KEYWORD => parse_fn(list),
+            Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
-            _ if list.len() == 2 => parse_apply(&list[0], &list[1]),
-            _ => Err(anyhow::anyhow!("illegal operands")),
+            _ => parse_apply(&list[0], &list[1..]),
         },
         Sexp::String(lit) => match lit.as_str() {
-            "nil" => Ok(Expr::Literal(Value::Nil)),
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
             _ => Ok(Expr::Variable(lit.to_string())),
@@ -109,11 +111,6 @@ mod tests {
         let ast = into_ast(&sexp).unwrap();
         assert_eq!(&ast, expected);
         Ok(())
-    }
-
-    #[test]
-    fn nil_literal() -> Result<()> {
-        should_be_ast("nil", &Expr::Literal(Value::Nil))
     }
 
     #[test]
@@ -179,28 +176,31 @@ mod tests {
     }
 
     #[test]
-    fn lam() -> Result<()> {
+    fn fn_def() -> Result<()> {
         let fn_def = Expr::FnDef(FnDef::new(
-            Parameter::new("x".to_string(), Some(Sexp::String("int".to_string()))),
+            vec![Parameter::new(
+                "x".to_string(),
+                Some(Sexp::String("int".to_string())),
+            )],
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam (x : int) x)", &fn_def)
+        should_be_ast("(fn (x : int) x)", &fn_def)
     }
 
     #[test]
-    fn lam_wo_anno() -> Result<()> {
+    fn fn_wo_anno() -> Result<()> {
         let fn_def = Expr::FnDef(FnDef::new(
-            Parameter::new("x".to_string(), None),
+            vec![Parameter::new("x".to_string(), None)],
             Box::new(Expr::Variable("x".to_string())),
         ));
-        should_be_ast("(lam x x)", &fn_def)
+        should_be_ast("(fn x x)", &fn_def)
     }
 
     #[test]
     fn app() -> Result<()> {
         let fn_app = Expr::FnApp(FnApp::new(
             Expr::Variable("succ".to_string()),
-            Expr::Literal(Value::Number(1)),
+            vec![Expr::Literal(Value::Number(1))],
         ));
         should_be_ast("(succ 1)", &fn_app)
     }
@@ -210,9 +210,9 @@ mod tests {
         // (+ 1 2) -> ((+ 1) 2)
         let plus1 = Expr::FnApp(FnApp::new(
             Expr::Variable("+".to_string()),
-            Expr::Literal(Value::Number(1)),
+            vec![Expr::Literal(Value::Number(1))],
         ));
-        let plus1_2 = Expr::FnApp(FnApp::new(plus1, Expr::Literal(Value::Number(2))));
+        let plus1_2 = Expr::FnApp(FnApp::new(plus1, vec![Expr::Literal(Value::Number(2))]));
         should_be_ast("((+ 1) 2)", &plus1_2)
     }
 }

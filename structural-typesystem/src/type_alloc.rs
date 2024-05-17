@@ -61,9 +61,13 @@ impl TypeAlloc {
             } => self.as_sexp_rec(inst, issuer, nest + 1),
             // type variables
             Type::Variable { id, .. } => Ok(Sexp::String(issuer.name(id))),
-            Type::Function { arg, ret, .. } => Ok(Sexp::List(vec![
+            Type::Function { args, ret, .. } => Ok(Sexp::List(vec![
                 Sexp::String("->".to_string()),
-                self.as_sexp_rec(arg, issuer, nest + 1)?,
+                Sexp::List(
+                    args.iter()
+                        .map(|arg| self.as_sexp_rec(*arg, issuer, nest + 1))
+                        .collect::<Result<Vec<_>>>()?,
+                ),
                 self.as_sexp_rec(ret, issuer, nest + 1)?,
             ])),
             Type::Record { fields, .. } => {
@@ -99,7 +103,10 @@ impl TypeAlloc {
 
     pub fn is_generic(&self, id: Id) -> Result<bool> {
         match self.get(id)? {
-            Type::Function { arg, ret, .. } => Ok(self.is_generic(arg)? || self.is_generic(ret)?),
+            Type::Function { args, ret, .. } => Ok(args
+                .iter()
+                .any(|arg| self.is_generic(*arg).unwrap())
+                || self.is_generic(ret)?),
             Type::Record { fields, .. } => {
                 Ok(fields.values().any(|id| self.is_generic(*id).unwrap()))
             }
@@ -118,8 +125,11 @@ mod tests {
     #[test]
     fn parse_fn_type() -> Result<()> {
         let mut type_env = TypeEnv::default();
-        let int_int = type_env.new_type(&parse_str("(-> int int)")?)?;
-        assert_eq!(type_env.alloc.as_sexp(int_int)?, parse_str("(-> int int)")?,);
+        let int_int = type_env.new_type(&parse_str("(-> (int) int)")?)?;
+        assert_eq!(
+            type_env.alloc.as_sexp(int_int)?,
+            parse_str("(-> (int) int)")?,
+        );
         Ok(())
     }
 
