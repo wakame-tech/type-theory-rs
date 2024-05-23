@@ -130,6 +130,7 @@ pub enum Value {
     External(External),
     Bool(bool),
     Number(i64),
+    Atom(String),
     Record(HashMap<String, Expr>),
 }
 
@@ -148,6 +149,13 @@ impl Value {
         }
     }
 
+    pub fn atom(&self) -> Result<String> {
+        match self {
+            Value::Atom(atom) => Ok(atom.clone()),
+            _ => Err(anyhow::anyhow!("not atom")),
+        }
+    }
+
     pub fn record(&self) -> Result<&HashMap<String, Expr>> {
         match self {
             Value::Record(record) => Ok(record),
@@ -162,6 +170,7 @@ impl Display for Value {
             Value::External(External(name)) => write!(f, "external({})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
+            Value::Atom(atom) => write!(f, ":{}", atom),
             Value::Record(record) => write!(
                 f,
                 "(record {})",

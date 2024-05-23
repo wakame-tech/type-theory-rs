@@ -18,6 +18,7 @@ impl InferType for Value {
             Value::External(External(name)) => env.get_variable(name),
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
+            Value::Atom(_) => env.get(&parse_str("atom")?),
             Value::Record(fields) => {
                 let fields = fields
                     .iter()

@@ -101,6 +101,9 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         Sexp::String(lit) => match lit.as_str() {
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
+            _ if lit.starts_with(":") => Ok(Expr::Literal(Value::Atom(
+                lit.trim_start_matches(":").to_string(),
+            ))),
             _ => Ok(Expr::Variable(lit.to_string())),
         },
         _ => Err(anyhow::anyhow!("invalid sexp: {}", sexp)),
@@ -130,6 +133,11 @@ mod tests {
     #[test]
     fn bool_literal() -> Result<()> {
         should_be_ast("true", &Expr::Literal(Value::Bool(true)))
+    }
+
+    #[test]
+    fn atom_literal() -> Result<()> {
+        should_be_ast(":atom", &Expr::Literal(Value::Atom("atom".to_string())))
     }
 
     #[test]

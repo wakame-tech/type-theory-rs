@@ -50,9 +50,13 @@ impl Default for TypeEnv {
         let mut env = TypeEnv::new();
         let any = env.new_type_str("any").unwrap();
         let int = env.new_type_str("int").unwrap();
-        let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(int, any);
+        
+        let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(bool, any);
+        
+        let atom = env.new_type_str("atom").unwrap();
+        env.new_subtype(atom, any);
         env
     }
 }
