@@ -6,6 +6,7 @@ use symbolic_expressions::Sexp;
 pub const LET_KEYWORD: &str = "let";
 pub const FN_KEYWORD: &str = "fn";
 pub const RECORD_KEYWORD: &str = "record";
+pub const LIST_KEYWORD: &str = "list";
 pub const TYPE_KEYWORD: &str = "type";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
@@ -83,6 +84,11 @@ fn parse_record(entries: &[Sexp]) -> Result<Value> {
     Ok(Value::Record(res))
 }
 
+fn parse_list(elements: &[Sexp]) -> Result<Value> {
+    let elements = elements.iter().map(into_ast).collect::<Result<Vec<_>>>()?;
+    Ok(Value::List(elements))
+}
+
 fn is_number(s: &str) -> bool {
     s.chars().all(|c| c.is_numeric())
 }
@@ -95,6 +101,9 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             Sexp::String(ref head) if head == TYPE_KEYWORD => parse_type(sexp),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
+            }
+            _ if list[0].is_string() && list[0].string()?.as_str() == LIST_KEYWORD => {
+                Ok(Expr::Literal(parse_list(&list[1..])?))
             }
             _ => parse_apply(&list[0], &list[1..]),
         },
@@ -148,6 +157,18 @@ mod tests {
                 ("a".to_string(), Expr::Literal(Value::Number(1))),
                 ("b".to_string(), Expr::Literal(Value::Number(2))),
             ]))),
+        )
+    }
+
+    #[test]
+    fn list_literal() -> Result<()> {
+        should_be_ast(
+            "(list 1 2 3)",
+            &Expr::Literal(Value::List(vec![
+                Expr::Literal(Value::Number(1)),
+                Expr::Literal(Value::Number(2)),
+                Expr::Literal(Value::Number(3)),
+            ])),
         )
     }
 

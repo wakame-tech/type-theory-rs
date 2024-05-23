@@ -132,6 +132,7 @@ pub enum Value {
     Number(i64),
     Atom(String),
     Record(HashMap<String, Expr>),
+    List(Vec<Expr>),
 }
 
 impl Value {
@@ -162,6 +163,13 @@ impl Value {
             _ => Err(anyhow::anyhow!("not record")),
         }
     }
+
+    pub fn list(&self) -> Result<&Vec<Expr>> {
+        match self {
+            Value::List(list) => Ok(list),
+            _ => Err(anyhow::anyhow!("not list")),
+        }
+    }
 }
 
 impl Display for Value {
@@ -177,6 +185,14 @@ impl Display for Value {
                 record
                     .iter()
                     .map(|(k, v)| format!("({} : {})", k, v))
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            Value::List(list) => write!(
+                f,
+                "(list {})",
+                list.iter()
+                    .map(|v| format!("{}", v))
                     .collect::<Vec<String>>()
                     .join(" ")
             ),

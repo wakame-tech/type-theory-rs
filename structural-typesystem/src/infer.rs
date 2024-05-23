@@ -30,6 +30,17 @@ impl InferType for Value {
                 let record_type = record(fields);
                 env.new_type(&record_type)
             }
+            Value::List(elems) => {
+                let elem_tys = elems
+                    .iter()
+                    .map(|e| e.infer_type(env, non_generic))
+                    .collect::<Result<HashSet<_>>>()?;
+                if elem_tys.len() != 1 {
+                    anyhow::bail!("list elements must have the same type")
+                }
+                let elem_ty = elem_tys.iter().next().unwrap().clone();
+                Ok(elem_ty)
+            }
         }
     }
 }
