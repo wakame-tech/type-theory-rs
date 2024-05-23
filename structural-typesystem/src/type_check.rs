@@ -4,7 +4,7 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Program};
+use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef};
 use std::collections::HashSet;
 
 pub trait TypeCheck {
@@ -82,6 +82,14 @@ impl TypeCheck for FnApp {
     }
 }
 
+impl TypeCheck for TypeDef {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        let id = env.new_type(&self.typ)?;
+        env.new_alias(&self.name, id);
+        Ok(id)
+    }
+}
+
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         let ret = match self {
@@ -90,6 +98,7 @@ impl TypeCheck for Expr {
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
+            Expr::TypeDef(type_def) => type_def.type_check(env),
         }?;
         log::debug!("{} : {}", self, env.type_name(ret)?);
         Ok(ret)

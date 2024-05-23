@@ -1,4 +1,4 @@
-use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
+use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, TypeDef, Value};
 use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
@@ -6,6 +6,7 @@ use symbolic_expressions::Sexp;
 pub const LET_KEYWORD: &str = "let";
 pub const FN_KEYWORD: &str = "fn";
 pub const RECORD_KEYWORD: &str = "record";
+pub const TYPE_KEYWORD: &str = "type";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     match sexp {
@@ -56,6 +57,13 @@ fn parse_let(sexp: &Sexp) -> Result<Expr> {
     }
 }
 
+fn parse_type(sexp: &Sexp) -> Result<Expr> {
+    let list = sexp.list()?;
+    anyhow::ensure!(list[2].string()? == ":", "missing colon {:?}", list);
+    let (name, typ) = (list[1].string()?, list[3].clone());
+    Ok(Expr::TypeDef(TypeDef::new(name.to_string(), typ)))
+}
+
 /// (f g h) -> ((f g) h)
 fn parse_apply(f: &Sexp, values: &[Sexp]) -> Result<Expr> {
     let f = into_ast(f)?;
@@ -84,6 +92,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref head) if head == FN_KEYWORD => parse_fn(list),
             Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
+            Sexp::String(ref head) if head == TYPE_KEYWORD => parse_type(sexp),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
@@ -101,7 +110,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
 #[cfg(test)]
 mod tests {
     use super::{into_ast, parse_parameter};
-    use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, Value};
+    use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, TypeDef, Value};
     use anyhow::Result;
     use std::collections::HashMap;
     use symbolic_expressions::{parser::parse_str, Sexp};
@@ -206,13 +215,11 @@ mod tests {
     }
 
     #[test]
-    fn op_redirects_app() -> Result<()> {
-        // (+ 1 2) -> ((+ 1) 2)
-        let plus1 = Expr::FnApp(FnApp::new(
-            Expr::Variable("+".to_string()),
-            vec![Expr::Literal(Value::Number(1))],
+    fn type_def() -> Result<()> {
+        let expr = Expr::TypeDef(TypeDef::new(
+            "a".to_string(),
+            Sexp::String("int".to_string()),
         ));
-        let plus1_2 = Expr::FnApp(FnApp::new(plus1, vec![Expr::Literal(Value::Number(2))]));
-        should_be_ast("((+ 1) 2)", &plus1_2)
+        should_be_ast("(type a : int)", &expr)
     }
 }

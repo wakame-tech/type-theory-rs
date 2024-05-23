@@ -109,6 +109,7 @@ impl InferType for Expr {
             Expr::FnApp(app) => app.infer_type(env, non_generic),
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
+            Expr::TypeDef(type_def) => env.new_type(&type_def.typ),
         }?;
         // log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
         Ok(ret)

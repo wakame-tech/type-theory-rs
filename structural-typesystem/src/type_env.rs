@@ -93,6 +93,10 @@ impl TypeEnv {
         self.tree.add_edge(bi, ai, ());
     }
 
+    pub fn new_alias(&mut self, name: &str, ty: Id) {
+        self.id_map.insert(name.to_string(), ty);
+    }
+
     pub fn new_type(&mut self, ty: &TypeExpr) -> Result<Id> {
         if let Some(id) = self.id_map.get(&ty.to_string()) {
             return Ok(*id);

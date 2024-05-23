@@ -105,6 +105,24 @@ impl Display for Let {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TypeDef {
+    pub name: String,
+    pub typ: Sexp,
+}
+
+impl TypeDef {
+    pub fn new(name: String, typ: Sexp) -> Self {
+        Self { name, typ }
+    }
+}
+
+impl Display for TypeDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "type {} = {}", self.name, self.typ)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct External(pub String);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -171,6 +189,7 @@ pub enum Expr {
     Let(Let),
     FnApp(FnApp),
     FnDef(FnDef),
+    TypeDef(TypeDef),
 }
 
 impl Expr {
@@ -201,6 +220,7 @@ impl Display for Expr {
             Expr::Let(let_) => write!(f, "{}", let_),
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
+            Expr::TypeDef(type_def) => write!(f, "{}", type_def),
         }
     }
 }
