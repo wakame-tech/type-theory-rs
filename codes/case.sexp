@@ -1,5 +1,7 @@
-(let x 2)
+(let x 1)
 (case
-    ((== x 1) => (dbg 1))
-    (true => (dbg 2))
+    ((& (== (% x 3) 0) (== (% x 5) 0)) => :fizzbuzz)
+    ((== (% x 3) 0) => :fizz)
+    ((== (% x 5) 0) => :buzz)
+    (true => :other)
 )

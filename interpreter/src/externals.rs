@@ -12,6 +12,8 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
         ("+", vec![("a", int()), ("b", int())], int()),
         ("-", vec![("a", int()), ("b", int())], int()),
         ("not", vec![("a", bool())], bool()),
+        ("&", vec![("a", bool()), ("b", bool())], bool()),
+        ("|", vec![("a", bool()), ("b", bool())], bool()),
         ("==", vec![("a", int()), ("b", int())], bool()),
         ("!=", vec![("a", int()), ("b", int())], bool()),
         ("dbg", vec![("a", parse_str("a")?)], parse_str("a")?),
@@ -45,6 +47,8 @@ pub fn eval_externals(env: Environment, name: &str) -> Result<(Expr, Environment
         "+" => number_plus(&env),
         "-" => number_minus(&env),
         "not" => bool_not(&env),
+        "&" => bool_and(&env),
+        "|" => bool_or(&env),
         "==" => number_eq(&env),
         "!=" => number_neq(&env),
         "[]" => access(&env),
@@ -91,6 +95,18 @@ fn number_neq(env: &Environment) -> Result<Expr> {
 fn bool_not(env: &Environment) -> Result<Expr> {
     let a = env.get("a")?.literal()?.boolean()?;
     Ok(Expr::Literal(Value::Bool(!a)))
+}
+
+fn bool_and(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.boolean()?;
+    let b = env.get("b")?.literal()?.boolean()?;
+    Ok(Expr::Literal(Value::Bool(a && b)))
+}
+
+fn bool_or(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.boolean()?;
+    let b = env.get("b")?.literal()?.boolean()?;
+    Ok(Expr::Literal(Value::Bool(a || b)))
 }
 
 fn access(env: &Environment) -> Result<Expr> {
