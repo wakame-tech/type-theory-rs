@@ -80,6 +80,7 @@ impl Eval for Expr {
             Expr::Literal(Value::External(External(name))) => eval_externals(env, name),
             Expr::Literal(lit) => lit.eval(t_env, env),
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
+            Expr::Case(_) => todo!(),
             e @ Expr::TypeDef(_) => Ok((e.clone(), env)),
         }
     }

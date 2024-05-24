@@ -204,6 +204,32 @@ impl Display for Value {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Case {
+    // (pattern, body)
+    branches: Vec<(Expr, Expr)>,
+}
+
+impl Case {
+    pub fn new(branches: Vec<(Expr, Expr)>) -> Self {
+        Self { branches }
+    }
+}
+
+impl Display for Case {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.branches
+                .iter()
+                .map(|(c, b)| format!("({} => {})", c, b))
+                .collect::<Vec<String>>()
+                .join(" ")
+        )
+    }
+}
+
 pub fn from_expr(expr: &Expr) -> Result<Value> {
     match expr {
         Expr::Literal(v) => Ok(v.clone()),
@@ -219,6 +245,7 @@ pub enum Expr {
     FnApp(FnApp),
     FnDef(FnDef),
     TypeDef(TypeDef),
+    Case(Case),
 }
 
 impl Expr {
@@ -250,6 +277,7 @@ impl Display for Expr {
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
             Expr::TypeDef(type_def) => write!(f, "{}", type_def),
+            Expr::Case(case) => write!(f, "{}", case),
         }
     }
 }

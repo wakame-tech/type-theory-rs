@@ -135,6 +135,7 @@ impl TypeCheck for Expr {
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::TypeDef(type_def) => type_def.type_check(env),
+            Expr::Case(_) => todo!(),
         }?;
         log::debug!("type_check: {} : {} #{}", self, env.type_name(res)?, res);
         Ok(res)
