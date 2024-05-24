@@ -27,6 +27,7 @@ fn main() -> Result<()> {
 
     let args = env::args().collect::<Vec<_>>();
     let ml_path = args.get(1).ok_or(anyhow::anyhow!("require ml_path"))?;
+    log::debug!("ml_path: {}", ml_path);
     let mut f = File::open(ml_path)?;
     let mut program = String::new();
     f.read_to_string(&mut program)?;

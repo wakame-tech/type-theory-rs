@@ -60,7 +60,11 @@ fn parse_let(sexp: &Sexp) -> Result<Expr> {
 
 fn parse_type(sexp: &Sexp) -> Result<Expr> {
     let list = sexp.list()?;
-    anyhow::ensure!(list[2].string()? == ":", "missing colon {:?}", list);
+    anyhow::ensure!(
+        list[2].is_string() && list[2].string()? == ":",
+        "missing colon in {}",
+        sexp
+    );
     let (name, typ) = (list[1].string()?, list[3].clone());
     Ok(Expr::TypeDef(TypeDef::new(name.to_string(), typ)))
 }
@@ -94,7 +98,8 @@ fn is_number(s: &str) -> bool {
 }
 
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
-    match sexp {
+    log::debug!("sexp: {}", sexp);
+    let expr = match sexp {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref head) if head == FN_KEYWORD => parse_fn(list),
             Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
@@ -116,7 +121,9 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             _ => Ok(Expr::Variable(lit.to_string())),
         },
         _ => Err(anyhow::anyhow!("invalid sexp: {}", sexp)),
-    }
+    }?;
+    log::debug!("-> ast: {}", expr);
+    Ok(expr)
 }
 
 #[cfg(test)]

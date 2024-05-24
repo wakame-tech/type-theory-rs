@@ -1,6 +1,9 @@
 use crate::{
     type_alloc::TypeAlloc,
-    types::{Id, Type, TypeExpr, FN_TYPE_KEYWORD, LIST_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
+    types::{
+        Id, Type, TypeExpr, FN_TYPE_KEYWORD, GETTER_TYPE_KEYWORD, LIST_TYPE_KEYWORD,
+        RECORD_TYPE_KEYWORD,
+    },
 };
 use anyhow::Result;
 use petgraph::prelude::*;
@@ -125,6 +128,13 @@ impl TypeEnv {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::primitive(id, s));
                 self.register_type_id(ty, id);
+
+                // all atoms are subtypes of atom
+                if s.starts_with(":") {
+                    let atom_ty = self.new_type_str("atom")?;
+                    self.new_subtype(id, atom_ty);
+                }
+
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
@@ -163,6 +173,26 @@ impl TypeEnv {
                     .collect::<Result<Vec<_>>>()?;
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::container(id, elements));
+                self.register_type_id(ty, id);
+                Ok(id)
+            }
+            // ([] t k)
+            Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
+                // t : record
+                let container_ty = self.new_type(&list[1])?;
+                let key_ty = self.new_type(&list[2])?;
+
+                if !matches!(self.alloc.get(container_ty)?, Type::Record { .. }) {
+                    return Err(anyhow::anyhow!("{} is not record", &list[1]));
+                }
+                let atom_ty = self.new_type_str("atom")?;
+                if !self.is_subtype(key_ty, atom_ty)? {
+                    return Err(anyhow::anyhow!("{} is not subtype of atom", &list[2]));
+                }
+
+                let id = self.alloc.issue_id();
+                self.alloc
+                    .insert(Type::container(id, vec![container_ty, key_ty]));
                 self.register_type_id(ty, id);
                 Ok(id)
             }

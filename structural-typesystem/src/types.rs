@@ -6,6 +6,7 @@ pub type TypeExpr = Sexp;
 
 pub const RECORD_TYPE_KEYWORD: &str = "record";
 pub const LIST_TYPE_KEYWORD: &str = "vec";
+pub const GETTER_TYPE_KEYWORD: &str = "[]";
 pub const FN_TYPE_KEYWORD: &str = "->";
 
 #[derive(Debug, Clone, Hash)]
