@@ -1,2 +1,2 @@
 (let r (record (a : 1)))
-([] r :a)
+(let a : int ([] r :a))

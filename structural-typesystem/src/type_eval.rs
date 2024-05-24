@@ -16,30 +16,31 @@ pub fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
     Ok(())
 }
 
-fn eval_type_access(env: &mut TypeEnv, record_t: Sexp, key_t: Sexp) -> Result<Sexp> {
-    let record_t = type_eval(env, record_t)?;
-    let record_t_id = env.new_type(&record_t)?;
-    let key_t = type_eval(env, key_t)?.string().cloned()?;
-    let key_atom = key_t.trim_start_matches(":");
-    let Type::Record { fields, .. } = env.alloc.get(record_t_id)? else {
-                return Err(anyhow::anyhow!("{} is not record type", record_t));
-            };
-    let field_t_id = fields
-        .get(key_atom)
-        .ok_or_else(|| anyhow::anyhow!("{} is not found in {}", key_t, record_t))?;
-    let field_t = env.type_name(*field_t_id)?;
-    Ok(field_t)
+fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
+    let record = type_eval(env, record)?;
+    let Type::Record { fields, .. } = env.alloc.get(record)? else {
+        return Err(anyhow::anyhow!("{} is not record type", record));
+    };
+    let key = type_eval(env, key)?;
+    let Sexp::String(atom) = env.type_name(key)? else {
+        return Err(anyhow::anyhow!("#{} is not atom type", key));
+    };
+    let key = atom.trim_start_matches(":");
+    fields
+        .get(key)
+        .copied()
+        .ok_or_else(|| anyhow::anyhow!("{} not found in record", key))
 }
 
-pub fn type_eval(env: &mut TypeEnv, ty: Sexp) -> Result<Sexp> {
-    log::debug!("type_eval: {}", ty);
-    let res = match ty {
-        t @ Sexp::String(_) => Ok(t),
+pub fn type_eval(env: &mut TypeEnv, id: Id) -> Result<Id> {
+    let t = env.type_name(id)?;
+    log::debug!("type_eval: {} #{}", t, id);
+    let res = match t {
         Sexp::List(list) if list[0].string()? == "[]" => {
-            let (record_t, key_t) = (list[1].clone(), list[2].clone());
-            eval_type_access(env, record_t, key_t)
+            let (record, key) = (env.new_type(&list[1])?, env.new_type(&list[2])?);
+            eval_type_access(env, record, key)
         }
-        t => Ok(t),
+        t => env.new_type(&t),
     }?;
     log::debug!("-> {}", res);
     Ok(res)

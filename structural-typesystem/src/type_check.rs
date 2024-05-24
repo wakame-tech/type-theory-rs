@@ -78,9 +78,10 @@ impl TypeCheck for FnDef {
 impl TypeCheck for Let {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         let value_ty = self.value.type_check(env)?;
+
         let let_ty = if let Some(decl_ty) = &self.typ {
-            let decl_ty = type_eval(env, decl_ty.clone())?;
             let decl_ty = env.new_type(&decl_ty)?;
+            let decl_ty = type_eval(env, decl_ty.clone())?;
             ensure_subtype(env, value_ty, decl_ty)?;
             decl_ty
         } else {
@@ -116,8 +117,8 @@ impl TypeCheck for FnApp {
 
 impl TypeCheck for TypeDef {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let typ = type_eval(env, self.typ.clone())?;
-        let id = env.new_type(&typ)?;
+        let id = env.new_type(&self.typ)?;
+        let id = type_eval(env, id)?;
         env.new_alias(&self.name, id);
         Ok(id)
     }
