@@ -1,6 +1,6 @@
 use crate::{environment::Environment, externals::eval_externals};
 use anyhow::{anyhow, Ok, Result};
-use ast::ast::{Expr, External, FnApp, FnDef, Let, Program, Value};
+use ast::ast::{Case, Expr, External, FnApp, FnDef, Let, Program, Value};
 use std::collections::HashMap;
 use structural_typesystem::type_env::TypeEnv;
 
@@ -70,6 +70,18 @@ impl Eval for FnApp {
     }
 }
 
+impl Eval for Case {
+    fn eval(&self, t_env: &mut TypeEnv, env: Environment) -> Result<(Expr, Environment)> {
+        for (pattern, body) in &self.branches {
+            let (pattern, env) = pattern.eval(t_env, env.clone())?;
+            if pattern == Expr::Literal(Value::Bool(true)) {
+                return body.eval(t_env, env);
+            }
+        }
+        Err(anyhow!("unreachable in case"))
+    }
+}
+
 impl Eval for Expr {
     fn eval(&self, t_env: &mut TypeEnv, env: Environment) -> Result<(Expr, Environment)> {
         log::debug!("expr eval {}", self);
@@ -80,7 +92,7 @@ impl Eval for Expr {
             Expr::Literal(Value::External(External(name))) => eval_externals(env, name),
             Expr::Literal(lit) => lit.eval(t_env, env),
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
-            Expr::Case(_) => todo!(),
+            Expr::Case(case) => case.eval(t_env, env),
             e @ Expr::TypeDef(_) => Ok((e.clone(), env)),
         }
     }
