@@ -88,6 +88,18 @@ impl TypeAlloc {
                         .collect::<Vec<_>>(),
                 ))
             }
+            Type::Container { elements, .. } => {
+                let elements = elements
+                    .iter()
+                    .map(|id| self.as_sexp_rec(*id, issuer, nest + 1))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Sexp::List(
+                    vec![Sexp::String("container".to_string())]
+                        .into_iter()
+                        .chain(elements)
+                        .collect::<Vec<_>>(),
+                ))
+            }
         }
     }
 
@@ -109,6 +121,9 @@ impl TypeAlloc {
                 || self.is_generic(ret)?),
             Type::Record { fields, .. } => {
                 Ok(fields.values().any(|id| self.is_generic(*id).unwrap()))
+            }
+            Type::Container { elements, .. } => {
+                Ok(elements.iter().any(|id| self.is_generic(*id).unwrap()))
             }
             Type::Primitive { .. } => Ok(false),
             Type::Variable { .. } => Ok(true),

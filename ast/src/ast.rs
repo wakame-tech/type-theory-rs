@@ -5,6 +5,8 @@ use std::{
 };
 use symbolic_expressions::Sexp;
 
+use crate::into_ast::{LIST_KEYWORD, RECORD_KEYWORD};
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: String,
@@ -181,7 +183,8 @@ impl Display for Value {
             Value::Atom(atom) => write!(f, ":{}", atom),
             Value::Record(record) => write!(
                 f,
-                "(record {})",
+                "({} {})",
+                RECORD_KEYWORD,
                 record
                     .iter()
                     .map(|(k, v)| format!("({} : {})", k, v))
@@ -190,7 +193,8 @@ impl Display for Value {
             ),
             Value::List(list) => write!(
                 f,
-                "(list {})",
+                "({} {})",
+                LIST_KEYWORD,
                 list.iter()
                     .map(|v| format!("{}", v))
                     .collect::<Vec<String>>()

@@ -13,7 +13,7 @@ pub mod externals;
 fn parse(program: &str) -> Result<Program> {
     let program = parse_str(&format!("({})", program))?
         .list()?
-        .into_iter()
+        .iter()
         .map(into_ast)
         .collect::<Result<Vec<_>>>()?;
     Ok(Program(program))

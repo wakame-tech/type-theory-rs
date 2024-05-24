@@ -1,7 +1,7 @@
 use crate::{
     type_alloc::TypeAlloc,
-    type_env::{record, TypeEnv},
-    types::{Id, Type},
+    type_env::{container, record, TypeEnv},
+    types::{Id, Type, LIST_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use ast::ast::{Expr, External, FnApp, FnDef, Let, Value};
@@ -38,8 +38,10 @@ impl InferType for Value {
                 if elem_tys.len() != 1 {
                     anyhow::bail!("list elements must have the same type")
                 }
-                let elem_ty = elem_tys.iter().next().unwrap().clone();
-                Ok(elem_ty)
+                let elem_ty = *elem_tys.iter().next().unwrap();
+                let elem_ty = env.alloc.as_sexp(elem_ty)?;
+                let container_ty = container(LIST_TYPE_KEYWORD.to_string(), vec![elem_ty]);
+                env.new_type(&container_ty)
             }
         }
     }
@@ -113,7 +115,7 @@ impl InferType for Expr {
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
-                let id = env.get_variable(name)?.clone();
+                let id = env.get_variable(name)?;
                 let ng = non_generic.iter().cloned().collect::<Vec<_>>();
                 let ret = fresh(env, id, &ng);
                 Ok(ret)
@@ -153,6 +155,12 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
         }
         Type::Record { id, fields } => {
             for (_, id) in fields {
+                fresh_rec(env, id, mappings, non_generic);
+            }
+            id
+        }
+        Type::Container { id, elements } => {
+            for id in elements {
                 fresh_rec(env, id, mappings, non_generic);
             }
             id

@@ -1,1 +1,1 @@
-(list 1 2 3)
+(let a : (vec bool) (vec true false))

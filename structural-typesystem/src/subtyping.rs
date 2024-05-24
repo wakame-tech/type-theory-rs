@@ -62,6 +62,16 @@ impl TypeEnv {
                     fields: b_fields, ..
                 },
             ) => self.is_subtype_map(a_fields, b_fields),
+            (
+                Type::Container {
+                    elements: a_elements,
+                    ..
+                },
+                Type::Container {
+                    elements: b_elements,
+                    ..
+                },
+            ) => self.is_subtype_vec(a_elements, b_elements),
             (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => Ok(true),
             _ => Ok(false),
         };

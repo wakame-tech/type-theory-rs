@@ -6,7 +6,7 @@ use symbolic_expressions::Sexp;
 pub const LET_KEYWORD: &str = "let";
 pub const FN_KEYWORD: &str = "fn";
 pub const RECORD_KEYWORD: &str = "record";
-pub const LIST_KEYWORD: &str = "list";
+pub const LIST_KEYWORD: &str = "vec";
 pub const TYPE_KEYWORD: &str = "type";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
@@ -110,8 +110,8 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         Sexp::String(lit) => match lit.as_str() {
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
-            _ if lit.starts_with(":") => Ok(Expr::Literal(Value::Atom(
-                lit.trim_start_matches(":").to_string(),
+            _ if lit.starts_with(':') => Ok(Expr::Literal(Value::Atom(
+                lit.trim_start_matches(':').to_string(),
             ))),
             _ => Ok(Expr::Variable(lit.to_string())),
         },

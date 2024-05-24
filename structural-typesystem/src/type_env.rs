@@ -1,6 +1,6 @@
 use crate::{
     type_alloc::TypeAlloc,
-    types::{Id, Type, TypeExpr, FN_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
+    types::{Id, Type, TypeExpr, FN_TYPE_KEYWORD, LIST_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use petgraph::prelude::*;
@@ -45,16 +45,25 @@ pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
     )
 }
 
+pub fn container(name: String, elements: Vec<TypeExpr>) -> TypeExpr {
+    Sexp::List(
+        vec![Sexp::String(name)]
+            .into_iter()
+            .chain(elements)
+            .collect(),
+    )
+}
+
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
         let any = env.new_type_str("any").unwrap();
         let int = env.new_type_str("int").unwrap();
         env.new_subtype(int, any);
-        
+
         let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(bool, any);
-        
+
         let atom = env.new_type_str("atom").unwrap();
         env.new_subtype(atom, any);
         env
@@ -147,7 +156,20 @@ impl TypeEnv {
                 self.register_type_id(ty, id);
                 Ok(id)
             }
-            _ => Err(anyhow::anyhow!("unsupported type: {}", ty)),
+            Sexp::List(list) if list[0].string()? == LIST_TYPE_KEYWORD => {
+                let elements = list[1..]
+                    .iter()
+                    .map(|s| self.new_type(s))
+                    .collect::<Result<Vec<_>>>()?;
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::container(id, elements));
+                self.register_type_id(ty, id);
+                Ok(id)
+            }
+            _ => Err(anyhow::anyhow!(
+                "TypeEnv::new_type() unsupported type: {}",
+                ty
+            )),
         }
     }
 
