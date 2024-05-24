@@ -19,6 +19,7 @@ impl InferType for Value {
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
             Value::Atom(atom) => env.new_type_str(format!(":{}", atom).as_str()),
+            Value::String(_) => env.get(&parse_str("str")?),
             Value::Record(fields) => {
                 let fields = fields
                     .iter()

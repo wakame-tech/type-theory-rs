@@ -133,6 +133,7 @@ pub enum Value {
     Bool(bool),
     Number(i64),
     Atom(String),
+    String(String),
     Record(HashMap<String, Expr>),
     List(Vec<Expr>),
 }
@@ -149,6 +150,13 @@ impl Value {
         match self {
             Value::Number(n) => Ok(*n),
             _ => Err(anyhow::anyhow!("not number")),
+        }
+    }
+
+    pub fn string(&self) -> Result<String> {
+        match self {
+            Value::String(s) => Ok(s.clone()),
+            _ => Err(anyhow::anyhow!("not string")),
         }
     }
 
@@ -180,6 +188,7 @@ impl Display for Value {
             Value::External(External(name)) => write!(f, "external({})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
+            Value::String(s) => write!(f, "'{}'", s),
             Value::Atom(atom) => write!(f, ":{}", atom),
             Value::Record(record) => write!(
                 f,

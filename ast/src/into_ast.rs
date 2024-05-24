@@ -131,8 +131,11 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             }
             _ => parse_apply(&list[0], &list[1..]),
         },
-        Sexp::String(lit) => match lit.as_str() {
+        Sexp::String(lit) => match dbg!(lit.as_str()) {
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
+            _ if lit.starts_with("'") && lit.ends_with("'") => Ok(Expr::Literal(Value::String(
+                lit[1..lit.len() - 1].to_string(),
+            ))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
             _ if lit.starts_with(':') => Ok(Expr::Literal(Value::Atom(
                 lit.trim_start_matches(':').to_string(),
@@ -173,6 +176,11 @@ mod tests {
     #[test]
     fn atom_literal() -> Result<()> {
         should_be_ast(":atom", &Expr::Literal(Value::Atom("atom".to_string())))
+    }
+
+    #[test]
+    fn string_literal() -> Result<()> {
+        should_be_ast("'str'", &Expr::Literal(Value::String("str".to_string())))
     }
 
     #[test]
