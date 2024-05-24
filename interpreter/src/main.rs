@@ -12,9 +12,8 @@ pub mod externals;
 
 fn parse(program: &str) -> Result<Program> {
     let program = program
-        .split("\n")
-        .into_iter()
-        .filter(|line| !line.starts_with(";"))
+        .split('\n')
+        .filter(|line| !line.starts_with(';'))
         .collect::<Vec<_>>()
         .join(" ");
     let program = parse_str(&format!("({})", program))?

@@ -131,7 +131,7 @@ impl InferType for Expr {
 
 fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_generic: &[Id]) -> Id {
     let p = prune(&mut env.alloc, tp);
-    match env.alloc.get(p).unwrap().clone() {
+    match env.alloc.get(p).unwrap() {
         Type::Variable { .. } => {
             if is_generic(&mut env.alloc, p, non_generic) {
                 if let Some(id) = mappings.get(&p) {
@@ -282,7 +282,7 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
     if prune_t == v {
         return true;
     }
-    match alloc.get(prune_t).unwrap().clone() {
+    match alloc.get(prune_t).unwrap() {
         Type::Primitive { id, .. } => occurs_in(alloc, id, &[]),
         Type::Function { args, ret, .. } => {
             let args_ret = args

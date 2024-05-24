@@ -134,7 +134,7 @@ impl TypeEnv {
                 self.register_type_id(ty, id);
 
                 // all atoms are subtypes of atom
-                if s.starts_with(":") {
+                if s.starts_with(':') {
                     let atom_ty = self.new_type_str("atom")?;
                     self.new_subtype(id, atom_ty);
                 }

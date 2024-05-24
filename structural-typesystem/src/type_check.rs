@@ -80,8 +80,8 @@ impl TypeCheck for Let {
         let value_ty = self.value.type_check(env)?;
 
         let let_ty = if let Some(decl_ty) = &self.typ {
-            let decl_ty = env.new_type(&decl_ty)?;
-            let decl_ty = type_eval(env, decl_ty.clone())?;
+            let decl_ty = env.new_type(decl_ty)?;
+            let decl_ty = type_eval(env, decl_ty)?;
             ensure_subtype(env, value_ty, decl_ty)?;
             decl_ty
         } else {

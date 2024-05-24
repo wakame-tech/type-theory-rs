@@ -25,7 +25,7 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
     let Sexp::String(atom) = env.type_name(key)? else {
         return Err(anyhow::anyhow!("#{} is not atom type", key));
     };
-    let key = atom.trim_start_matches(":");
+    let key = atom.trim_start_matches(':');
     fields.get(key).copied().ok_or_else(|| {
         anyhow::anyhow!(
             "key :{} not found in record {}",
