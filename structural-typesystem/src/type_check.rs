@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 pub trait TypeCheck {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id>;
@@ -14,26 +14,39 @@ pub trait TypeCheck {
 
 impl TypeCheck for Value {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let id = self.infer_type(env, &mut Default::default())?;
         match self {
-            Value::Record(_) => todo!(),
+            Value::Record(fields) => {
+                let field_tys = fields
+                    .iter()
+                    .map(|(name, expr)| expr.type_check(env).map(|id| (name.to_string(), id)))
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                let id = env.alloc.issue_id();
+                let record_ty = Type::record(id, field_tys);
+                env.alloc.insert(record_ty);
+                Ok(id)
+            }
             Value::List(elems) => {
-                let Type::Container { elements, .. }  = env.alloc.get(id)? else {
-                    return Err(anyhow::anyhow!("{} is not container type", self));
-                };
-                let expected_elem_ty = elements[0];
-
+                let vec_ty = env.new_type_str("vec")?;
                 let elem_tys = elems
                     .iter()
                     .map(|elem| elem.type_check(env))
                     .collect::<Result<Vec<_>>>()?;
-                elem_tys
-                    .iter()
-                    .map(|elem_ty| ensure_subtype(env, *elem_ty, expected_elem_ty))
-                    .collect::<Result<_>>()?;
+                if elem_tys.iter().collect::<HashSet<_>>().len() != 1 {
+                    return Err(anyhow::anyhow!(
+                        "list elements must have same type: [{}]",
+                        elem_tys
+                            .iter()
+                            .map(|id| env.type_name(*id).map(|t| t.to_string()))
+                            .collect::<Result<Vec<_>>>()?
+                            .join(", ")
+                    ));
+                }
+                let container_ty = Type::container(vec_ty, elem_tys.into_iter().collect());
+                let id = env.alloc.issue_id();
+                env.alloc.insert(container_ty);
                 Ok(id)
             }
-            _ => Ok(id),
+            _ => self.infer_type(env, &mut Default::default()),
         }
     }
 }
@@ -123,7 +136,7 @@ impl TypeCheck for Expr {
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::TypeDef(type_def) => type_def.type_check(env),
         }?;
-        log::debug!("type_check: {} : {}", self, env.type_name(res)?);
+        log::debug!("type_check: {} : {} #{}", self, env.type_name(res)?, res);
         Ok(res)
     }
 }

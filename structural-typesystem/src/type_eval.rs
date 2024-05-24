@@ -10,7 +10,7 @@ pub fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
         return Err(anyhow::anyhow!(
             "{} is not subtype of {}",
             env.type_name(a)?,
-            env.type_name(b)?
+            env.type_name(b)?,
         ));
     }
     Ok(())

@@ -72,13 +72,15 @@ impl TypeEnv {
                     ..
                 },
             ) => self.is_subtype_vec(a_elements, b_elements),
-            (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => Ok(true),
+            (Type::Variable { id: a_id, .. }, Type::Variable { id: b_id, .. }) => Ok(a_id == b_id),
             _ => Ok(false),
         };
         log::debug!(
-            "check {} <: {} = {:?}",
+            "check {} #{} <: {} #{} = {:?}",
             self.type_name(a)?,
+            a,
             self.type_name(b)?,
+            b,
             res
         );
         res
