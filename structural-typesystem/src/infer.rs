@@ -4,7 +4,7 @@ use crate::{
     types::{Id, Type, LIST_TYPE_KEYWORD},
 };
 use anyhow::Result;
-use ast::ast::{Expr, External, FnApp, FnDef, Let, Value};
+use ast::ast::{Case, Expr, External, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use symbolic_expressions::parser::parse_str;
 
@@ -110,6 +110,22 @@ impl InferType for Let {
     }
 }
 
+impl InferType for Case {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+        let Case { branches, .. } = self;
+        let mut ret_ty = None;
+        for (_, body) in branches {
+            let body_ty = body.infer_type(env, non_generic)?;
+            if let Some(ret_ty) = ret_ty {
+                unify(env, ret_ty, body_ty)?;
+            } else {
+                ret_ty = Some(body_ty);
+            }
+        }
+        Ok(ret_ty.unwrap())
+    }
+}
+
 impl InferType for Expr {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let ret = match self {
@@ -124,7 +140,7 @@ impl InferType for Expr {
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
             Expr::TypeDef(type_def) => env.new_type(&type_def.typ),
-            Expr::Case(_) => todo!(),
+            Expr::Case(case) => case.infer_type(env, non_generic),
         }?;
         // log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
         Ok(ret)
