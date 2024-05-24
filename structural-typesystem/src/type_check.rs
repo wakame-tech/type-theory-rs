@@ -5,11 +5,37 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef};
+use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
 use std::collections::HashSet;
 
 pub trait TypeCheck {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id>;
+}
+
+impl TypeCheck for Value {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        let id = self.infer_type(env, &mut Default::default())?;
+        match self {
+            Value::Record(_) => todo!(),
+            Value::List(elems) => {
+                let Type::Container { elements, .. }  = env.alloc.get(id)? else {
+                    return Err(anyhow::anyhow!("{} is not container type", self));
+                };
+                let expected_elem_ty = elements[0];
+
+                let elem_tys = elems
+                    .iter()
+                    .map(|elem| elem.type_check(env))
+                    .collect::<Result<Vec<_>>>()?;
+                elem_tys
+                    .iter()
+                    .map(|elem_ty| ensure_subtype(env, *elem_ty, expected_elem_ty))
+                    .collect::<Result<_>>()?;
+                Ok(id)
+            }
+            _ => Ok(id),
+        }
+    }
 }
 
 impl TypeCheck for FnDef {
@@ -58,10 +84,14 @@ impl TypeCheck for FnApp {
     /// f :: a -> b
     /// v :: a
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        let id = self.infer_type(env, &HashSet::new())?;
+        log::debug!("fn_app infer: {:?}", env.alloc.get(id)?);
+
         let f_ty = self.0.type_check(env)?;
         let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
+
         for (value, arg) in self.1.iter().zip(args.iter()) {
             let param_ty = value.type_check(env)?;
             // if `arg_ty` is generic, skip subtype check
@@ -84,16 +114,17 @@ impl TypeCheck for TypeDef {
 
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let ret = match self {
-            Expr::Literal(value) => value.infer_type(env, &mut Default::default()),
+        log::debug!("type_check: {}", self);
+        let res = match self {
+            Expr::Literal(value) => value.type_check(env),
             Expr::Variable(name) => env.get_variable(name),
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::TypeDef(type_def) => type_def.type_check(env),
         }?;
-        log::debug!("{} : {}", self, env.type_name(ret)?);
-        Ok(ret)
+        log::debug!("type_check: {} : {}", self, env.type_name(res)?);
+        Ok(res)
     }
 }
 

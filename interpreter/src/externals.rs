@@ -16,6 +16,11 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
         ("!=", vec![("a", int()), ("b", int())], bool()),
         ("dbg", vec![("a", parse_str("a")?)], parse_str("a")?),
         ("id", vec![("a", parse_str("a")?)], parse_str("a")?),
+        // (
+        //     "[]",
+        //     vec![("r", parse_str("a")?), ("k", parse_str("atom")?)],
+        //     parse_str("([] r k)")?,
+        // ),
     ] {
         let ty = arrow(args.iter().map(|(_, arg)| arg).cloned().collect(), ret);
         let ty = type_env.new_type(&ty)?;

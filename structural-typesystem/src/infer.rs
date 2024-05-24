@@ -31,15 +31,14 @@ impl InferType for Value {
                 env.new_type(&record_type)
             }
             Value::List(elems) => {
-                let elem_tys = elems
-                    .iter()
-                    .map(|e| e.infer_type(env, non_generic))
-                    .collect::<Result<HashSet<_>>>()?;
-                if elem_tys.len() != 1 {
-                    anyhow::bail!("list elements must have the same type")
-                }
-                let elem_ty = *elem_tys.iter().next().unwrap();
-                let elem_ty = env.alloc.as_sexp(elem_ty)?;
+                // each elements infers type which id is different so use 1st element of type.
+                // if empty, element type infers to any.
+                let elem = if let Some(elem) = elems.first() {
+                    elem.infer_type(env, non_generic)?
+                } else {
+                    env.new_type_str("a")?
+                };
+                let elem_ty = env.alloc.as_sexp(elem)?;
                 let container_ty = container(LIST_TYPE_KEYWORD.to_string(), vec![elem_ty]);
                 env.new_type(&container_ty)
             }
@@ -135,12 +134,13 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
     match env.alloc.get(p).unwrap().clone() {
         Type::Variable { .. } => {
             if is_generic(&mut env.alloc, p, non_generic) {
-                let insert = |env: &mut TypeEnv| {
+                if let Some(id) = mappings.get(&p) {
+                    *id
+                } else {
                     let id = env.alloc.issue_id();
                     env.alloc.insert(Type::variable(id));
                     id
-                };
-                *mappings.entry(p).or_insert(insert(env))
+                }
             } else {
                 p
             }
