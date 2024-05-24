@@ -11,6 +11,7 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
     for (name, args, ret) in [
         ("+", vec![("a", int()), ("b", int())], int()),
         ("-", vec![("a", int()), ("b", int())], int()),
+        ("%", vec![("a", int()), ("b", int())], int()),
         ("not", vec![("a", bool())], bool()),
         ("&", vec![("a", bool()), ("b", bool())], bool()),
         ("|", vec![("a", bool()), ("b", bool())], bool()),
@@ -46,6 +47,7 @@ pub fn eval_externals(env: Environment, name: &str) -> Result<(Expr, Environment
         "id" => a_id(&env),
         "+" => number_plus(&env),
         "-" => number_minus(&env),
+        "%" => number_mod(&env),
         "not" => bool_not(&env),
         "&" => bool_and(&env),
         "|" => bool_or(&env),
@@ -78,6 +80,12 @@ fn number_minus(env: &Environment) -> Result<Expr> {
     let a = env.get("a")?.literal()?.number()?;
     let b = env.get("b")?.literal()?.number()?;
     Ok(Expr::Literal(Value::Number(a - b)))
+}
+
+fn number_mod(env: &Environment) -> Result<Expr> {
+    let a = env.get("a")?.literal()?.number()?;
+    let b = env.get("b")?.literal()?.number()?;
+    Ok(Expr::Literal(Value::Number(a % b)))
 }
 
 fn number_eq(env: &Environment) -> Result<Expr> {
