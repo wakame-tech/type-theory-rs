@@ -41,7 +41,8 @@ impl TypeCheck for Value {
                             .join(", ")
                     ));
                 }
-                let container_ty = Type::container(vec_ty, elem_tys.into_iter().collect());
+                let elem_ty = elem_tys[0];
+                let container_ty = Type::container(vec_ty, vec![elem_ty]);
                 let id = env.alloc.issue_id();
                 env.alloc.insert(container_ty);
                 Ok(id)
