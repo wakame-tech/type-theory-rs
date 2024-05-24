@@ -46,7 +46,7 @@ impl TypeCheck for Value {
                 env.alloc.insert(container_ty);
                 Ok(id)
             }
-            _ => self.infer_type(env, &mut Default::default()),
+            _ => self.infer_type(env, &Default::default()),
         }
     }
 }
@@ -85,7 +85,7 @@ impl TypeCheck for Let {
             ensure_subtype(env, value_ty, decl_ty)?;
             decl_ty
         } else {
-            let infer_ty = self.value.infer_type(env, &mut HashSet::new())?;
+            let infer_ty = self.value.infer_type(env, &HashSet::new())?;
             log::debug!("infer {} : {}", self.name, env.type_name(infer_ty)?);
             infer_ty
         };
