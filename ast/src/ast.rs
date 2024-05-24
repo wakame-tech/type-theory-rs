@@ -207,7 +207,7 @@ impl Display for Value {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Case {
     // (pattern, body)
-    branches: Vec<(Expr, Expr)>,
+    pub branches: Vec<(Expr, Expr)>,
 }
 
 impl Case {

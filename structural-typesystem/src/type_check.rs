@@ -5,7 +5,7 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
+use ast::ast::{Case, Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
 use std::collections::{BTreeMap, HashSet};
 
 pub trait TypeCheck {
@@ -125,6 +125,39 @@ impl TypeCheck for TypeDef {
     }
 }
 
+impl TypeCheck for Case {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        let body_tys = self
+            .branches
+            .iter()
+            .map(|(pattern, body)| {
+                let pattern_ty = pattern.type_check(env)?;
+                if pattern_ty != env.new_type_str("bool")? {
+                    return Err(anyhow::anyhow!(
+                        "pattern {} must be bool but {}",
+                        pattern,
+                        env.type_name(pattern_ty)?
+                    ));
+                }
+                let body_ty = body.type_check(env)?;
+                Ok(body_ty)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if body_tys.iter().collect::<HashSet<_>>().len() != 1 {
+            return Err(anyhow::anyhow!(
+                "case branches must have same type: [{}]",
+                body_tys
+                    .iter()
+                    .map(|id| env.type_name(*id).map(|t| t.to_string()))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(", ")
+            ));
+        }
+        let ret_ty = body_tys[0];
+        Ok(ret_ty)
+    }
+}
+
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         log::debug!("type_check: {:?}", self);
@@ -135,7 +168,7 @@ impl TypeCheck for Expr {
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::TypeDef(type_def) => type_def.type_check(env),
-            Expr::Case(_) => todo!(),
+            Expr::Case(case) => case.type_check(env),
         }?;
         log::debug!("type_check: {} : {} #{}", self, env.type_name(res)?, res);
         Ok(res)
