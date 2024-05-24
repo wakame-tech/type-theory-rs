@@ -1,6 +1,6 @@
 use crate::{
     type_env::TypeEnv,
-    types::{Id, Type},
+    types::{Id, Type, GETTER_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use symbolic_expressions::Sexp;
@@ -26,22 +26,22 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
         return Err(anyhow::anyhow!("#{} is not atom type", key));
     };
     let key = atom.trim_start_matches(":");
-    fields
-        .get(key)
-        .copied()
-        .ok_or_else(|| anyhow::anyhow!("{} not found in record", key))
+    fields.get(key).copied().ok_or_else(|| {
+        anyhow::anyhow!(
+            "key :{} not found in record {}",
+            key,
+            env.type_name(record).unwrap()
+        )
+    })
 }
 
 pub fn type_eval(env: &mut TypeEnv, id: Id) -> Result<Id> {
     let t = env.type_name(id)?;
-    log::debug!("type_eval: {} #{}", t, id);
-    let res = match t {
-        Sexp::List(list) if list[0].string()? == "[]" => {
+    match t {
+        Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
             let (record, key) = (env.new_type(&list[1])?, env.new_type(&list[2])?);
             eval_type_access(env, record, key)
         }
         t => env.new_type(&t),
-    }?;
-    log::debug!("-> {}", res);
-    Ok(res)
+    }
 }
