@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn list_literal() -> Result<()> {
         should_be_ast(
-            "(list 1 2 3)",
+            "(vec 1 2 3)",
             &Expr::Literal(Value::List(vec![
                 Expr::Literal(Value::Number(1)),
                 Expr::Literal(Value::Number(2)),

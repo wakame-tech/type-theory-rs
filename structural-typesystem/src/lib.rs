@@ -4,6 +4,7 @@ pub mod subtyping;
 pub mod type_alloc;
 pub mod type_check;
 pub mod type_env;
+pub mod type_eval;
 pub mod types;
 
 #[cfg(test)]

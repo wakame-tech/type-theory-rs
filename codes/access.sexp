@@ -1,2 +1,2 @@
-(type t : ([] (record (a : int)) :a))
-(let a : t 1)
+(type r : (record (a : int)))
+(let a : ([] r :a) 1)
