@@ -97,9 +97,7 @@ impl TypeCheck for FnApp {
     /// f :: a -> b
     /// v :: a
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let id = self.infer_type(env, &HashSet::new())?;
-        log::debug!("fn_app infer: {:?}", env.alloc.get(id)?);
-
+        self.infer_type(env, &HashSet::new())?;
         let f_ty = self.0.type_check(env)?;
         let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
@@ -127,7 +125,7 @@ impl TypeCheck for TypeDef {
 
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        log::debug!("type_check: {}", self);
+        log::debug!("type_check: {:?}", self);
         let res = match self {
             Expr::Literal(value) => value.type_check(env),
             Expr::Variable(name) => env.get_variable(name),

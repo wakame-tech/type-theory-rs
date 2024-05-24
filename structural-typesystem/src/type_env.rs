@@ -181,23 +181,13 @@ impl TypeEnv {
                 self.register_type_id(ty, id);
                 Ok(id)
             }
-            // ([] t k)
+            // ([] a b)
             Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
-                // t : record
-                let container_ty = self.new_type(&list[1])?;
-                let key_ty = self.new_type(&list[2])?;
-
-                if !matches!(self.alloc.get(container_ty)?, Type::Record { .. }) {
-                    return Err(anyhow::anyhow!("{} is not record", &list[1]));
-                }
-                let atom_ty = self.new_type_str("atom")?;
-                if !self.is_subtype(key_ty, atom_ty)? {
-                    return Err(anyhow::anyhow!("{} is not subtype of atom", &list[2]));
-                }
-
+                let con = self.new_type(&list[0])?;
+                let a = self.new_type(&list[1])?;
+                let b = self.new_type(&list[2])?;
                 let id = self.alloc.issue_id();
-                self.alloc
-                    .insert(Type::container(id, vec![container_ty, key_ty]));
+                self.alloc.insert(Type::container(con, vec![a, b]));
                 self.register_type_id(ty, id);
                 Ok(id)
             }
