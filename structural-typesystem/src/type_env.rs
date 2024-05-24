@@ -69,6 +69,10 @@ impl Default for TypeEnv {
 
         let atom = env.new_type_str("atom").unwrap();
         env.new_subtype(atom, any);
+
+        let vec = env.new_type_str("vec").unwrap();
+        env.new_subtype(vec, any);
+
         env
     }
 }
@@ -171,8 +175,9 @@ impl TypeEnv {
                     .iter()
                     .map(|s| self.new_type(s))
                     .collect::<Result<Vec<_>>>()?;
+                let con = self.new_type(&list[0])?;
                 let id = self.alloc.issue_id();
-                self.alloc.insert(Type::container(id, elements));
+                self.alloc.insert(Type::container(con, elements));
                 self.register_type_id(ty, id);
                 Ok(id)
             }

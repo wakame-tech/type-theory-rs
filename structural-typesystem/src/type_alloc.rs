@@ -88,13 +88,14 @@ impl TypeAlloc {
                         .collect::<Vec<_>>(),
                 ))
             }
-            Type::Container { elements, .. } => {
+            Type::Container { id, elements } => {
+                let container = self.as_sexp(id)?;
                 let elements = elements
                     .iter()
-                    .map(|id| self.as_sexp_rec(*id, issuer, nest + 1))
+                    .map(|id| self.as_sexp(*id))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Sexp::List(
-                    vec![Sexp::String("container".to_string())]
+                    vec![container]
                         .into_iter()
                         .chain(elements)
                         .collect::<Vec<_>>(),
