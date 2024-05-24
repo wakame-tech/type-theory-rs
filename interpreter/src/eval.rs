@@ -1,13 +1,40 @@
 use crate::{environment::Environment, externals::eval_externals};
 use anyhow::{anyhow, Ok, Result};
 use ast::ast::{Expr, External, FnApp, FnDef, Let, Program, Value};
+use std::collections::HashMap;
 use structural_typesystem::type_env::TypeEnv;
 
 pub trait Eval {
     fn eval(&self, t_env: &mut TypeEnv, env: Environment) -> Result<(Expr, Environment)>;
 }
 
-impl<'a> Eval for FnDef {
+impl Eval for Value {
+    fn eval(&self, t_env: &mut TypeEnv, env: Environment) -> Result<(Expr, Environment)> {
+        match self {
+            Value::Record(fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|(name, value)| {
+                        value
+                            .eval(t_env, env.clone())
+                            .map(|t| (name.to_string(), t.0))
+                    })
+                    .collect::<Result<HashMap<_, _>>>()?;
+                Ok((Expr::Literal(Value::Record(fields)), env))
+            }
+            Value::List(elements) => {
+                let elements = elements
+                    .iter()
+                    .map(|value| value.eval(t_env, env.clone()).map(|t| t.0))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok((Expr::Literal(Value::List(elements)), env))
+            }
+            v => Ok((Expr::Literal(v.clone()), env)),
+        }
+    }
+}
+
+impl Eval for FnDef {
     fn eval(&self, _t_env: &mut TypeEnv, env: Environment) -> Result<(Expr, Environment)> {
         Ok((Expr::FnDef(self.clone()), env))
     }
@@ -51,8 +78,9 @@ impl Eval for Expr {
             Expr::Let(r#let) => r#let.eval(t_env, env),
             Expr::FnApp(fnapp) => fnapp.eval(t_env, env),
             Expr::Literal(Value::External(External(name))) => eval_externals(env, name),
-            Expr::Literal(lit) => Ok((Expr::Literal(lit.clone()), env)),
+            Expr::Literal(lit) => lit.eval(t_env, env),
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
+            e @ Expr::TypeDef(_) => Ok((e.clone(), env)),
         }
     }
 }

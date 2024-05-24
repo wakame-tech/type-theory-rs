@@ -1,6 +1,9 @@
 use crate::{
     type_alloc::TypeAlloc,
-    types::{Id, Type, TypeExpr, FN_TYPE_KEYWORD, RECORD_TYPE_KEYWORD},
+    types::{
+        Id, Type, TypeExpr, FN_TYPE_KEYWORD, GETTER_TYPE_KEYWORD, LIST_TYPE_KEYWORD,
+        RECORD_TYPE_KEYWORD,
+    },
 };
 use anyhow::Result;
 use petgraph::prelude::*;
@@ -45,14 +48,31 @@ pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
     )
 }
 
+pub fn container(name: String, elements: Vec<TypeExpr>) -> TypeExpr {
+    Sexp::List(
+        vec![Sexp::String(name)]
+            .into_iter()
+            .chain(elements)
+            .collect(),
+    )
+}
+
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
         let any = env.new_type_str("any").unwrap();
         let int = env.new_type_str("int").unwrap();
-        let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(int, any);
+
+        let bool = env.new_type_str("bool").unwrap();
         env.new_subtype(bool, any);
+
+        let atom = env.new_type_str("atom").unwrap();
+        env.new_subtype(atom, any);
+
+        let vec = env.new_type_str("vec").unwrap();
+        env.new_subtype(vec, any);
+
         env
     }
 }
@@ -93,6 +113,10 @@ impl TypeEnv {
         self.tree.add_edge(bi, ai, ());
     }
 
+    pub fn new_alias(&mut self, name: &str, ty: Id) {
+        self.id_map.insert(name.to_string(), ty);
+    }
+
     pub fn new_type(&mut self, ty: &TypeExpr) -> Result<Id> {
         if let Some(id) = self.id_map.get(&ty.to_string()) {
             return Ok(*id);
@@ -108,6 +132,13 @@ impl TypeEnv {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::primitive(id, s));
                 self.register_type_id(ty, id);
+
+                // all atoms are subtypes of atom
+                if s.starts_with(':') {
+                    let atom_ty = self.new_type_str("atom")?;
+                    self.new_subtype(id, atom_ty);
+                }
+
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
@@ -139,7 +170,31 @@ impl TypeEnv {
                 self.register_type_id(ty, id);
                 Ok(id)
             }
-            _ => Err(anyhow::anyhow!("unsupported type: {}", ty)),
+            Sexp::List(list) if list[0].string()? == LIST_TYPE_KEYWORD => {
+                let elements = list[1..]
+                    .iter()
+                    .map(|s| self.new_type(s))
+                    .collect::<Result<Vec<_>>>()?;
+                let con = self.new_type(&list[0])?;
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::container(con, elements));
+                self.register_type_id(ty, id);
+                Ok(id)
+            }
+            // ([] a b)
+            Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
+                let con = self.new_type(&list[0])?;
+                let a = self.new_type(&list[1])?;
+                let b = self.new_type(&list[2])?;
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::container(con, vec![a, b]));
+                self.register_type_id(ty, id);
+                Ok(id)
+            }
+            _ => Err(anyhow::anyhow!(
+                "TypeEnv::new_type() unsupported type: {}",
+                ty
+            )),
         }
     }
 

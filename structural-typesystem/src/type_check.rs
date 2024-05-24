@@ -1,25 +1,54 @@
 use crate::{
     infer::InferType,
     type_env::TypeEnv,
+    type_eval::{ensure_subtype, type_eval},
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Program};
-use std::collections::HashSet;
+use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
+use std::collections::{BTreeMap, HashSet};
 
 pub trait TypeCheck {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id>;
 }
 
-fn ensure_subtype(env: &mut TypeEnv, a: Id, b: Id) -> Result<()> {
-    if !env.is_subtype(a, b)? {
-        return Err(anyhow::anyhow!(
-            "{} is not subtype of {}",
-            env.type_name(a)?,
-            env.type_name(b)?
-        ));
+impl TypeCheck for Value {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        match self {
+            Value::Record(fields) => {
+                let field_tys = fields
+                    .iter()
+                    .map(|(name, expr)| expr.type_check(env).map(|id| (name.to_string(), id)))
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                let id = env.alloc.issue_id();
+                let record_ty = Type::record(id, field_tys);
+                env.alloc.insert(record_ty);
+                Ok(id)
+            }
+            Value::List(elems) => {
+                let vec_ty = env.new_type_str("vec")?;
+                let elem_tys = elems
+                    .iter()
+                    .map(|elem| elem.type_check(env))
+                    .collect::<Result<Vec<_>>>()?;
+                if elem_tys.iter().collect::<HashSet<_>>().len() != 1 {
+                    return Err(anyhow::anyhow!(
+                        "list elements must have same type: [{}]",
+                        elem_tys
+                            .iter()
+                            .map(|id| env.type_name(*id).map(|t| t.to_string()))
+                            .collect::<Result<Vec<_>>>()?
+                            .join(", ")
+                    ));
+                }
+                let container_ty = Type::container(vec_ty, elem_tys.into_iter().collect());
+                let id = env.alloc.issue_id();
+                env.alloc.insert(container_ty);
+                Ok(id)
+            }
+            _ => self.infer_type(env, &mut Default::default()),
+        }
     }
-    Ok(())
 }
 
 impl TypeCheck for FnDef {
@@ -49,8 +78,10 @@ impl TypeCheck for FnDef {
 impl TypeCheck for Let {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         let value_ty = self.value.type_check(env)?;
+
         let let_ty = if let Some(decl_ty) = &self.typ {
             let decl_ty = env.new_type(decl_ty)?;
+            let decl_ty = type_eval(env, decl_ty)?;
             ensure_subtype(env, value_ty, decl_ty)?;
             decl_ty
         } else {
@@ -67,10 +98,12 @@ impl TypeCheck for FnApp {
     /// f :: a -> b
     /// v :: a
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        self.infer_type(env, &HashSet::new())?;
         let f_ty = self.0.type_check(env)?;
         let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
+
         for (value, arg) in self.1.iter().zip(args.iter()) {
             let param_ty = value.type_check(env)?;
             // if `arg_ty` is generic, skip subtype check
@@ -82,17 +115,28 @@ impl TypeCheck for FnApp {
     }
 }
 
+impl TypeCheck for TypeDef {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        let id = env.new_type(&self.typ)?;
+        let id = type_eval(env, id)?;
+        env.new_alias(&self.name, id);
+        Ok(id)
+    }
+}
+
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let ret = match self {
-            Expr::Literal(value) => value.infer_type(env, &mut Default::default()),
+        log::debug!("type_check: {:?}", self);
+        let res = match self {
+            Expr::Literal(value) => value.type_check(env),
             Expr::Variable(name) => env.get_variable(name),
             Expr::Let(lt) => lt.type_check(env),
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
+            Expr::TypeDef(type_def) => type_def.type_check(env),
         }?;
-        log::debug!("{} : {}", self, env.type_name(ret)?);
-        Ok(ret)
+        log::debug!("type_check: {} : {} #{}", self, env.type_name(res)?, res);
+        Ok(res)
     }
 }
 

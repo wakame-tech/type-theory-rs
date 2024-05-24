@@ -1,5 +1,6 @@
 use crate::{
     type_env::TypeEnv,
+    type_eval::type_eval,
     types::{Id, Type},
 };
 use anyhow::Result;
@@ -30,6 +31,7 @@ impl TypeEnv {
     /// subtyping order for [TypeExpr]
     pub fn is_subtype(&mut self, a: Id, b: Id) -> Result<bool> {
         let any = self.get(&parse_str("any")?)?;
+        let (a, b) = (type_eval(self, a)?, type_eval(self, b)?);
         let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
         let res = match (a_ty, b_ty) {
             // any vs ?
@@ -62,13 +64,25 @@ impl TypeEnv {
                     fields: b_fields, ..
                 },
             ) => self.is_subtype_map(a_fields, b_fields),
-            (Type::Variable { .. }, _) | (_, Type::Variable { .. }) => Ok(true),
+            (
+                Type::Container {
+                    elements: a_elements,
+                    ..
+                },
+                Type::Container {
+                    elements: b_elements,
+                    ..
+                },
+            ) => self.is_subtype_vec(a_elements, b_elements),
+            (Type::Variable { id: a_id, .. }, Type::Variable { id: b_id, .. }) => Ok(a_id == b_id),
             _ => Ok(false),
         };
         log::debug!(
-            "check {} <: {} = {:?}",
+            "check {} #{} <: {} #{} = {:?}",
             self.type_name(a)?,
+            a,
             self.type_name(b)?,
+            b,
             res
         );
         res

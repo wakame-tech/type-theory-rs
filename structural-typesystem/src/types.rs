@@ -5,6 +5,8 @@ pub type Id = usize;
 pub type TypeExpr = Sexp;
 
 pub const RECORD_TYPE_KEYWORD: &str = "record";
+pub const LIST_TYPE_KEYWORD: &str = "vec";
+pub const GETTER_TYPE_KEYWORD: &str = "[]";
 pub const FN_TYPE_KEYWORD: &str = "->";
 
 #[derive(Debug, Clone, Hash)]
@@ -26,6 +28,10 @@ pub enum Type {
         id: Id,
         fields: BTreeMap<String, Id>,
     },
+    Container {
+        id: Id,
+        elements: Vec<Id>,
+    },
 }
 
 impl Type {
@@ -35,6 +41,7 @@ impl Type {
             Type::Variable { id, .. } => *id,
             Type::Function { id, .. } => *id,
             Type::Record { id, .. } => *id,
+            Type::Container { id, .. } => *id,
         }
     }
 
@@ -64,5 +71,9 @@ impl Type {
 
     pub fn record(id: Id, fields: BTreeMap<String, Id>) -> Self {
         Type::Record { id, fields }
+    }
+
+    pub fn container(id: Id, elements: Vec<Id>) -> Self {
+        Type::Container { id, elements }
     }
 }

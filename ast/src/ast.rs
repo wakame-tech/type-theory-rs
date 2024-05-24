@@ -5,6 +5,8 @@ use std::{
 };
 use symbolic_expressions::Sexp;
 
+use crate::into_ast::{LIST_KEYWORD, RECORD_KEYWORD};
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     pub name: String,
@@ -105,6 +107,24 @@ impl Display for Let {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct TypeDef {
+    pub name: String,
+    pub typ: Sexp,
+}
+
+impl TypeDef {
+    pub fn new(name: String, typ: Sexp) -> Self {
+        Self { name, typ }
+    }
+}
+
+impl Display for TypeDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "type {} = {}", self.name, self.typ)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct External(pub String);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -112,7 +132,9 @@ pub enum Value {
     External(External),
     Bool(bool),
     Number(i64),
+    Atom(String),
     Record(HashMap<String, Expr>),
+    List(Vec<Expr>),
 }
 
 impl Value {
@@ -130,10 +152,24 @@ impl Value {
         }
     }
 
+    pub fn atom(&self) -> Result<String> {
+        match self {
+            Value::Atom(atom) => Ok(atom.clone()),
+            _ => Err(anyhow::anyhow!("not atom")),
+        }
+    }
+
     pub fn record(&self) -> Result<&HashMap<String, Expr>> {
         match self {
             Value::Record(record) => Ok(record),
             _ => Err(anyhow::anyhow!("not record")),
+        }
+    }
+
+    pub fn list(&self) -> Result<&Vec<Expr>> {
+        match self {
+            Value::List(list) => Ok(list),
+            _ => Err(anyhow::anyhow!("not list")),
         }
     }
 }
@@ -144,12 +180,23 @@ impl Display for Value {
             Value::External(External(name)) => write!(f, "external({})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
+            Value::Atom(atom) => write!(f, ":{}", atom),
             Value::Record(record) => write!(
                 f,
-                "(record {})",
+                "({} {})",
+                RECORD_KEYWORD,
                 record
                     .iter()
                     .map(|(k, v)| format!("({} : {})", k, v))
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            Value::List(list) => write!(
+                f,
+                "({} {})",
+                LIST_KEYWORD,
+                list.iter()
+                    .map(|v| format!("{}", v))
                     .collect::<Vec<String>>()
                     .join(" ")
             ),
@@ -171,6 +218,7 @@ pub enum Expr {
     Let(Let),
     FnApp(FnApp),
     FnDef(FnDef),
+    TypeDef(TypeDef),
 }
 
 impl Expr {
@@ -201,6 +249,7 @@ impl Display for Expr {
             Expr::Let(let_) => write!(f, "{}", let_),
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
+            Expr::TypeDef(type_def) => write!(f, "{}", type_def),
         }
     }
 }

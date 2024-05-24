@@ -16,8 +16,14 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
         ("!=", vec![("a", int()), ("b", int())], bool()),
         ("dbg", vec![("a", parse_str("a")?)], parse_str("a")?),
         ("id", vec![("a", parse_str("a")?)], parse_str("a")?),
+        (
+            "[]",
+            vec![("r", parse_str("a")?), ("k", parse_str("b")?)],
+            parse_str("([] a b)")?,
+        ),
     ] {
         let ty = arrow(args.iter().map(|(_, arg)| arg).cloned().collect(), ret);
+        log::debug!("{} : {}", name, ty);
         let ty = type_env.new_type(&ty)?;
         type_env.set_variable(name, ty);
 
@@ -41,6 +47,7 @@ pub fn eval_externals(env: Environment, name: &str) -> Result<(Expr, Environment
         "not" => bool_not(&env),
         "==" => number_eq(&env),
         "!=" => number_neq(&env),
+        "[]" => access(&env),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
     }?;
     Ok((res, env))
@@ -84,4 +91,11 @@ fn number_neq(env: &Environment) -> Result<Expr> {
 fn bool_not(env: &Environment) -> Result<Expr> {
     let a = env.get("a")?.literal()?.boolean()?;
     Ok(Expr::Literal(Value::Bool(!a)))
+}
+
+fn access(env: &Environment) -> Result<Expr> {
+    let r = env.get("r")?.literal()?;
+    let r = r.record()?;
+    let k = env.get("k")?.literal()?.atom()?;
+    Ok(r.get(&k).unwrap().clone())
 }

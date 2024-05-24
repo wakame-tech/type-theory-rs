@@ -1,7 +1,7 @@
 use crate::{
     type_alloc::TypeAlloc,
-    type_env::{record, TypeEnv},
-    types::{Id, Type},
+    type_env::{container, record, TypeEnv},
+    types::{Id, Type, LIST_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use ast::ast::{Expr, External, FnApp, FnDef, Let, Value};
@@ -18,6 +18,7 @@ impl InferType for Value {
             Value::External(External(name)) => env.get_variable(name),
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
+            Value::Atom(atom) => env.new_type_str(format!(":{}", atom).as_str()),
             Value::Record(fields) => {
                 let fields = fields
                     .iter()
@@ -28,6 +29,18 @@ impl InferType for Value {
                     .collect::<Result<BTreeMap<_, _>>>()?;
                 let record_type = record(fields);
                 env.new_type(&record_type)
+            }
+            Value::List(elems) => {
+                // each elements infers type which id is different so use 1st element of type.
+                // if empty, element type infers to any.
+                let elem = if let Some(elem) = elems.first() {
+                    elem.infer_type(env, non_generic)?
+                } else {
+                    env.new_type_str("a")?
+                };
+                let elem_ty = env.alloc.as_sexp(elem)?;
+                let container_ty = container(LIST_TYPE_KEYWORD.to_string(), vec![elem_ty]);
+                env.new_type(&container_ty)
             }
         }
     }
@@ -101,7 +114,7 @@ impl InferType for Expr {
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
-                let id = env.get_variable(name)?.clone();
+                let id = env.get_variable(name)?;
                 let ng = non_generic.iter().cloned().collect::<Vec<_>>();
                 let ret = fresh(env, id, &ng);
                 Ok(ret)
@@ -109,6 +122,7 @@ impl InferType for Expr {
             Expr::FnApp(app) => app.infer_type(env, non_generic),
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
+            Expr::TypeDef(type_def) => env.new_type(&type_def.typ),
         }?;
         // log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
         Ok(ret)
@@ -117,15 +131,16 @@ impl InferType for Expr {
 
 fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_generic: &[Id]) -> Id {
     let p = prune(&mut env.alloc, tp);
-    match env.alloc.get(p).unwrap().clone() {
+    match env.alloc.get(p).unwrap() {
         Type::Variable { .. } => {
             if is_generic(&mut env.alloc, p, non_generic) {
-                let insert = |env: &mut TypeEnv| {
+                if let Some(id) = mappings.get(&p) {
+                    *id
+                } else {
                     let id = env.alloc.issue_id();
                     env.alloc.insert(Type::variable(id));
                     id
-                };
-                *mappings.entry(p).or_insert(insert(env))
+                }
             } else {
                 p
             }
@@ -140,6 +155,12 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
         }
         Type::Record { id, fields } => {
             for (_, id) in fields {
+                fresh_rec(env, id, mappings, non_generic);
+            }
+            id
+        }
+        Type::Container { id, elements } => {
+            for id in elements {
                 fresh_rec(env, id, mappings, non_generic);
             }
             id
@@ -261,7 +282,7 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
     if prune_t == v {
         return true;
     }
-    match alloc.get(prune_t).unwrap().clone() {
+    match alloc.get(prune_t).unwrap() {
         Type::Primitive { id, .. } => occurs_in(alloc, id, &[]),
         Type::Function { args, ret, .. } => {
             let args_ret = args

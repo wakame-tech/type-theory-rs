@@ -11,9 +11,14 @@ pub mod eval;
 pub mod externals;
 
 fn parse(program: &str) -> Result<Program> {
+    let program = program
+        .split('\n')
+        .filter(|line| !line.starts_with(';'))
+        .collect::<Vec<_>>()
+        .join(" ");
     let program = parse_str(&format!("({})", program))?
         .list()?
-        .into_iter()
+        .iter()
         .map(into_ast)
         .collect::<Result<Vec<_>>>()?;
     Ok(Program(program))
@@ -27,6 +32,7 @@ fn main() -> Result<()> {
 
     let args = env::args().collect::<Vec<_>>();
     let ml_path = args.get(1).ok_or(anyhow::anyhow!("require ml_path"))?;
+    log::debug!("ml_path: {}", ml_path);
     let mut f = File::open(ml_path)?;
     let mut program = String::new();
     f.read_to_string(&mut program)?;
