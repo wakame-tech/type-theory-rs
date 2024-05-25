@@ -1,1 +1,2 @@
-(map id (vec 1 2 3))
+(let f (fn (v : int) 's'))
+(map f (map id (vec 1)))

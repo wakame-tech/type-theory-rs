@@ -32,6 +32,12 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
             ],
             parse_str("(vec b)")?,
         ),
+        (
+            "range",
+            vec![("start", int()), ("end", int())],
+            parse_str("(vec int)")?,
+        ),
+        ("to_string", vec![("v", parse_str("a")?)], parse_str("str")?),
     ] {
         let ty = arrow(args.iter().map(|(_, arg)| arg).cloned().collect(), ret);
         let id = type_env.new_type(&ty)?;
@@ -55,6 +61,7 @@ pub fn eval_externals(
 ) -> Result<(Expr, Environment)> {
     let res = match name {
         "dbg" => a_dbg(&env),
+        "to_string" => a_to_string(&env),
         "id" => a_id(&env),
         "+" => number_plus(&env),
         "-" => number_minus(&env),
@@ -66,6 +73,7 @@ pub fn eval_externals(
         "!=" => number_neq(&env),
         "[]" => access(&env),
         "map" => map(t_env, &env),
+        "range" => range(&env),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
     }?;
     Ok((res, env))
@@ -75,6 +83,11 @@ fn a_dbg(env: &Environment) -> Result<Expr> {
     let a = env.get("a")?;
     println!("{}", a);
     Ok(a.clone())
+}
+
+fn a_to_string(env: &Environment) -> Result<Expr> {
+    let v = env.get("v")?;
+    Ok(Expr::Literal(Value::String(format!("{}", v))))
 }
 
 fn a_id(env: &Environment) -> Result<Expr> {
@@ -148,4 +161,14 @@ fn map(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(Expr::Literal(Value::List(elements)))
+}
+
+fn range(env: &Environment) -> Result<Expr> {
+    let start = env.get("start")?.literal()?.number()?;
+    let end = env.get("end")?.literal()?.number()?;
+    Ok(Expr::Literal(Value::List(
+        (start..end)
+            .map(|i| Expr::Literal(Value::Number(i)))
+            .collect(),
+    )))
 }
