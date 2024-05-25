@@ -1,6 +1,6 @@
-use crate::environment::Environment;
+use crate::{environment::Environment, eval::Eval};
 use anyhow::Result;
-use ast::ast::{Expr, External, FnDef, Parameter, Value};
+use ast::ast::{Expr, External, FnApp, FnDef, Parameter, Value};
 use structural_typesystem::type_env::{arrow, TypeEnv};
 use symbolic_expressions::parser::parse_str;
 
@@ -24,6 +24,18 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
             vec![("r", parse_str("a")?), ("k", parse_str("b")?)],
             parse_str("([] a b)")?,
         ),
+        // TODO: DEBUG [structural_typesystem::type_check]
+        // type_check: FnApp(FnApp(Variable("map"), [Variable("id"), Literal(List([Literal(Number(1)), Literal(Number(2)), Literal(Number(3))]))]))
+        // DEBUG [structural_typesystem::infer] #21 = ? -> ? vs #30 = #[11, 28] -> #29
+        // thread 'main' has overflowed its stack
+        (
+            "map",
+            vec![
+                ("f", parse_str("(-> (s) t)")?),
+                ("v", parse_str("(vec s)")?),
+            ],
+            parse_str("(vec t)")?,
+        ),
     ] {
         let ty = arrow(args.iter().map(|(_, arg)| arg).cloned().collect(), ret);
         log::debug!("{} : {}", name, ty);
@@ -41,7 +53,11 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
     Ok(())
 }
 
-pub fn eval_externals(env: Environment, name: &str) -> Result<(Expr, Environment)> {
+pub fn eval_externals(
+    t_env: &TypeEnv,
+    env: Environment,
+    name: &str,
+) -> Result<(Expr, Environment)> {
     let res = match name {
         "dbg" => a_dbg(&env),
         "id" => a_id(&env),
@@ -54,6 +70,7 @@ pub fn eval_externals(env: Environment, name: &str) -> Result<(Expr, Environment
         "==" => number_eq(&env),
         "!=" => number_neq(&env),
         "[]" => access(&env),
+        // "map" => map(t_env, &env),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
     }?;
     Ok((res, env))
@@ -122,4 +139,18 @@ fn access(env: &Environment) -> Result<Expr> {
     let r = r.record()?;
     let k = env.get("k")?.literal()?.atom()?;
     Ok(r.get(&k).unwrap().clone())
+}
+
+fn map(t_env: &TypeEnv, env: &Environment) -> Result<Expr> {
+    todo!()
+    // let v = env.get("v")?.literal()?.list()?;
+    // let elements = v
+    //     .into_iter()
+    //     .map(|e| {
+    //         FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
+    //             .eval(t_env, env)
+    //             .map(|t| t.0)
+    //     })
+    //     .collect::<Result<Vec<_>>>()?;
+    // Ok(Expr::Literal(Value::List(elements)))
 }

@@ -89,7 +89,7 @@ impl Eval for Expr {
             Expr::FnDef(fndef) => fndef.eval(t_env, env),
             Expr::Let(r#let) => r#let.eval(t_env, env),
             Expr::FnApp(fnapp) => fnapp.eval(t_env, env),
-            Expr::Literal(Value::External(External(name))) => eval_externals(env, name),
+            Expr::Literal(Value::External(External(name))) => eval_externals(&t_env, env, name),
             Expr::Literal(lit) => lit.eval(t_env, env),
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
             Expr::Case(case) => case.eval(t_env, env),
@@ -135,8 +135,8 @@ mod tests {
     #[test]
     fn test_nest_fn() -> Result<()> {
         should_eval(
-            r#"(let f (fn x (fn y (+ x y))))
-            ((f 1) ((f 2) 3))"#,
+            r#"(let g (fn x (fn y (+ x y))))
+            ((g 1) ((g 2) 3))"#,
             "6",
         )
     }
