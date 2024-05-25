@@ -9,7 +9,7 @@ pub const LIST_TYPE_KEYWORD: &str = "vec";
 pub const GETTER_TYPE_KEYWORD: &str = "[]";
 pub const FN_TYPE_KEYWORD: &str = "->";
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum Type {
     Primitive {
         id: Id,

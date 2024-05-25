@@ -24,23 +24,18 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
             vec![("r", parse_str("a")?), ("k", parse_str("b")?)],
             parse_str("([] a b)")?,
         ),
-        // TODO: DEBUG [structural_typesystem::type_check]
-        // type_check: FnApp(FnApp(Variable("map"), [Variable("id"), Literal(List([Literal(Number(1)), Literal(Number(2)), Literal(Number(3))]))]))
-        // DEBUG [structural_typesystem::infer] #21 = ? -> ? vs #30 = #[11, 28] -> #29
-        // thread 'main' has overflowed its stack
         (
             "map",
             vec![
-                ("f", parse_str("(-> (s) t)")?),
-                ("v", parse_str("(vec s)")?),
+                ("f", parse_str("(-> (a) b)")?),
+                ("v", parse_str("(vec a)")?),
             ],
-            parse_str("(vec t)")?,
+            parse_str("(vec b)")?,
         ),
     ] {
         let ty = arrow(args.iter().map(|(_, arg)| arg).cloned().collect(), ret);
-        log::debug!("{} : {}", name, ty);
-        let ty = type_env.new_type(&ty)?;
-        type_env.set_variable(name, ty);
+        let id = type_env.new_type(&ty)?;
+        type_env.set_variable(name, id);
 
         let def = Expr::FnDef(FnDef::new(
             args.into_iter()
@@ -54,7 +49,7 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
 }
 
 pub fn eval_externals(
-    t_env: &TypeEnv,
+    t_env: &mut TypeEnv,
     env: Environment,
     name: &str,
 ) -> Result<(Expr, Environment)> {
@@ -70,7 +65,7 @@ pub fn eval_externals(
         "==" => number_eq(&env),
         "!=" => number_neq(&env),
         "[]" => access(&env),
-        // "map" => map(t_env, &env),
+        "map" => map(t_env, &env),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
     }?;
     Ok((res, env))
@@ -141,16 +136,16 @@ fn access(env: &Environment) -> Result<Expr> {
     Ok(r.get(&k).unwrap().clone())
 }
 
-fn map(t_env: &TypeEnv, env: &Environment) -> Result<Expr> {
-    todo!()
-    // let v = env.get("v")?.literal()?.list()?;
-    // let elements = v
-    //     .into_iter()
-    //     .map(|e| {
-    //         FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
-    //             .eval(t_env, env)
-    //             .map(|t| t.0)
-    //     })
-    //     .collect::<Result<Vec<_>>>()?;
-    // Ok(Expr::Literal(Value::List(elements)))
+fn map(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
+    let v = env.get("v")?.literal()?;
+    let v = v.list()?;
+    let elements = v
+        .into_iter()
+        .map(|e| {
+            FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
+                .eval(t_env, env.clone())
+                .map(|t| t.0)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Expr::Literal(Value::List(elements)))
 }

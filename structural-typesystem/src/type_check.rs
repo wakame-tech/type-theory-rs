@@ -104,7 +104,6 @@ impl TypeCheck for FnApp {
         let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
-
         for (value, arg) in self.1.iter().zip(args.iter()) {
             let param_ty = value.type_check(env)?;
             // if `arg_ty` is generic, skip subtype check
@@ -160,7 +159,7 @@ impl TypeCheck for Case {
 
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        log::debug!("type_check: {:?}", self);
+        log::debug!("type_check: {}", self);
         let res = match self {
             Expr::Literal(value) => value.type_check(env),
             Expr::Variable(name) => env.get_variable(name),

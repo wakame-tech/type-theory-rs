@@ -229,12 +229,12 @@ impl Display for Case {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}",
+            "(case\n  {}\n)",
             self.branches
                 .iter()
                 .map(|(c, b)| format!("({} => {})", c, b))
                 .collect::<Vec<String>>()
-                .join(" ")
+                .join("\n  ")
         )
     }
 }

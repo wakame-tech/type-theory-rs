@@ -61,12 +61,17 @@ impl InferType for FnApp {
         env.alloc
             .insert(Type::function(new_fn_ty, arg_ty_ids.clone(), ret_ty_id));
         log::debug!(
-            "#{} = ? -> ? vs #{} = #{:?} -> #{}",
-            fn_ty,
+            "[app] {}: (->_#{} [{}] {})",
+            self,
             new_fn_ty,
-            arg_ty_ids,
-            ret_ty_id
+            arg_ty_ids
+                .iter()
+                .map(|id| env.alloc.debug(*id))
+                .collect::<Result<Vec<_>>>()?
+                .join(" "),
+            env.alloc.debug(ret_ty_id)?,
         );
+        log::debug!("[def] {}", env.alloc.debug(fn_ty)?,);
         unify(env, new_fn_ty, fn_ty)?;
         Ok(prune(&mut env.alloc, ret_ty_id))
     }
@@ -202,26 +207,21 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
     if a == b {
         return Ok(a);
     }
+    // log::debug!("unify#left  {}", env.alloc.debug(a)?);
+    // log::debug!("unify#right {}", env.alloc.debug(b)?);
     let (a_ty, b_ty) = (env.alloc.get(a)?, env.alloc.get(b)?);
-    // log::debug!(
-    //     "unify #{} = {} and #{} = {}",
-    //     a,
-    //     env.type_name(a)?,
-    //     b,
-    //     env.type_name(b)?
-    // );
     match (&a_ty, &b_ty) {
-        (_, Type::Variable { .. }) => unify(env, s, t),
         (Type::Variable { .. }, _) => {
             if a != b {
                 if occurs_in_type(&mut env.alloc, a, b) {
-                    panic!("recursive unification")
+                    return Err(anyhow::anyhow!("recursive unification"));
                 }
                 // log::debug!("type variable #{} := #{}", a, b);
                 env.alloc.get_mut(a)?.set_instance(b);
             }
             Ok(b)
         }
+        (_, Type::Variable { .. }) => unify(env, s, t),
         // unify fn type
         (
             Type::Function {
@@ -262,10 +262,30 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
             env.alloc.insert(Type::record(id, fields));
             Ok(id)
         }
+        (
+            Type::Container {
+                elements: a_elements,
+                id,
+            },
+            Type::Container {
+                elements: b_elements,
+                ..
+            },
+        ) => {
+            let elements = a_elements
+                .iter()
+                .zip(b_elements.iter())
+                .map(|(a, b)| unify(env, *a, *b))
+                .collect::<Result<Vec<_>>>()?;
+            env.alloc.insert(Type::container(*id, elements));
+            Ok(*id)
+        }
         _ => Err(anyhow::anyhow!(
-            "unify: type mismatch: {:?} != {:?}",
-            a_ty,
-            b_ty
+            "unify: type mismatch: {} #{} != {} #{}",
+            env.type_name(a)?,
+            a,
+            env.type_name(b)?,
+            b,
         )),
     }
 }

@@ -8,4 +8,4 @@
         )
     )
 )
-(fizzbuzz 3)
+(dbg (map fizzbuzz (vec 1 2 3 4 5)))

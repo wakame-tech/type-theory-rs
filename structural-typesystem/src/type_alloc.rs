@@ -47,6 +47,32 @@ impl TypeAlloc {
         self.as_sexp_rec(id, &mut Default::default(), 0)
     }
 
+    pub fn debug(&self, id: Id) -> Result<String> {
+        match self.get(id)? {
+            Type::Primitive { id, name } => Ok(format!("{}_#{}", name, id)),
+            Type::Variable { id, .. } => Ok(format!("?_#{}", id)),
+            Type::Function { id, args, ret } => Ok(format!(
+                "(->_#{} [{}] {})",
+                id,
+                args.iter()
+                    .map(|arg| self.debug(*arg))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(" "),
+                self.debug(ret)?,
+            )),
+            Type::Record { id, fields } => Ok(format!("(record_#{} {:?})", id, fields)),
+            Type::Container { id, elements } => Ok(format!(
+                "({} {})",
+                self.debug(id)?,
+                elements
+                    .iter()
+                    .map(|id| self.debug(*id))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(" ")
+            )),
+        }
+    }
+
     fn as_sexp_rec(&self, id: Id, issuer: &mut Issuer, nest: usize) -> Result<TypeExpr> {
         if nest > 10 {
             return Err(anyhow!("cyclic type"));
