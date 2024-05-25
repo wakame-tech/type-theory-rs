@@ -33,6 +33,22 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
             parse_str("(vec b)")?,
         ),
         (
+            "map",
+            vec![
+                ("f", parse_str("(-> (a) b)")?),
+                ("v", parse_str("(vec a)")?),
+            ],
+            parse_str("(vec b)")?,
+        ),
+        (
+            "filter",
+            vec![
+                ("f", parse_str("(-> (a) bool)")?),
+                ("v", parse_str("(vec a)")?),
+            ],
+            parse_str("(vec a)")?,
+        ),
+        (
             "range",
             vec![("start", int()), ("end", int())],
             parse_str("(vec int)")?,
@@ -73,6 +89,7 @@ pub fn eval_externals(
         "!=" => number_neq(&env),
         "[]" => access(&env),
         "map" => map(t_env, &env),
+        "filter" => filter(t_env, &env),
         "range" => range(&env),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
     }?;
@@ -160,6 +177,21 @@ fn map(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
                 .map(|t| t.0)
         })
         .collect::<Result<Vec<_>>>()?;
+    Ok(Expr::Literal(Value::List(elements)))
+}
+
+fn filter(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
+    let v = env.get("v")?.literal()?;
+    let v = v.list()?;
+    let mut elements = vec![];
+    for e in v {
+        let ok = FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
+            .eval(t_env, env.clone())
+            .map(|t| t.0)?;
+        if ok.literal()?.boolean()? {
+            elements.push(e.clone());
+        }
+    }
     Ok(Expr::Literal(Value::List(elements)))
 }
 

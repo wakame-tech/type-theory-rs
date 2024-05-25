@@ -8,4 +8,4 @@
         )
     )
 )
-(map dbg (map fizzbuzz (range 1 30)))
+(map dbg (map fizzbuzz (filter (fn (x : int) (== (% x 2) 0)) (range 1 30))))
