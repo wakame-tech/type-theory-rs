@@ -121,8 +121,12 @@ impl TypeEnv {
     }
 
     pub fn new_type(&mut self, ty: &TypeExpr) -> Result<Id> {
-        if let Some(id) = self.id_map.get(&ty.to_string()) {
-            return Ok(*id);
+        // type variable treated as different type if it has same name
+        let is_variable = ty.is_string() && ty.string()?.len() == 1;
+        if !is_variable {
+            if let Some(id) = self.id_map.get(&ty.to_string()) {
+                return Ok(*id);
+            }
         }
         match ty {
             Sexp::String(v) if v.len() == 1 => {
