@@ -23,7 +23,11 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
     };
     let key = type_eval(env, key)?;
     let Sexp::String(atom) = env.type_name(key)? else {
-        return Err(anyhow::anyhow!("#{} is not atom type", key));
+        return Err(anyhow::anyhow!(
+            "{} #{} is not atom type",
+            env.type_name(key)?,
+            key
+        ));
     };
     let key = atom.trim_start_matches(':');
     fields.get(key).copied().ok_or_else(|| {
@@ -38,7 +42,7 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
 pub fn type_eval(env: &mut TypeEnv, id: Id) -> Result<Id> {
     let t = env.type_name(id)?;
     match t {
-        Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
+        Sexp::List(list) if list[0].is_string() && list[0].string()? == GETTER_TYPE_KEYWORD => {
             let (record, key) = (env.new_type(&list[1])?, env.new_type(&list[2])?);
             eval_type_access(env, record, key)
         }

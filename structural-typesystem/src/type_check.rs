@@ -5,7 +5,8 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
+use ast::ast::{Case, Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
+
 use std::collections::{BTreeMap, HashSet};
 
 pub trait TypeCheck {
@@ -78,12 +79,17 @@ impl TypeCheck for FnDef {
 
 impl TypeCheck for Let {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let value_ty = self.value.type_check(env)?;
+        log::debug!("let {} = {}", self.name, self.value);
+        let use_decl_type = matches!(self.value.as_ref(), Expr::Literal(Value::External(_)));
 
-        let let_ty = if let Some(decl_ty) = &self.typ {
+        let let_ty = if self.typ.is_some() || use_decl_type {
+            let decl_ty = self.typ.as_ref().unwrap();
             let decl_ty = env.new_type(decl_ty)?;
             let decl_ty = type_eval(env, decl_ty)?;
-            ensure_subtype(env, value_ty, decl_ty)?;
+            if !use_decl_type {
+                let value_ty = self.value.type_check(env)?;
+                ensure_subtype(env, value_ty, decl_ty)?;
+            }
             decl_ty
         } else {
             let infer_ty = self.value.infer_type(env, &HashSet::new())?;
@@ -91,6 +97,7 @@ impl TypeCheck for Let {
             infer_ty
         };
         env.set_variable(&self.name, let_ty);
+        log::debug!("{} : {}", self.name, env.type_name(let_ty)?);
         Ok(let_ty)
     }
 }
@@ -104,7 +111,6 @@ impl TypeCheck for FnApp {
         let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
-
         for (value, arg) in self.1.iter().zip(args.iter()) {
             let param_ty = value.type_check(env)?;
             // if `arg_ty` is generic, skip subtype check
@@ -125,9 +131,42 @@ impl TypeCheck for TypeDef {
     }
 }
 
+impl TypeCheck for Case {
+    fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
+        let body_tys = self
+            .branches
+            .iter()
+            .map(|(pattern, body)| {
+                let pattern_ty = pattern.type_check(env)?;
+                if pattern_ty != env.new_type_str("bool")? {
+                    return Err(anyhow::anyhow!(
+                        "pattern {} must be bool but {}",
+                        pattern,
+                        env.type_name(pattern_ty)?
+                    ));
+                }
+                let body_ty = body.type_check(env)?;
+                Ok(body_ty)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if body_tys.iter().collect::<HashSet<_>>().len() != 1 {
+            return Err(anyhow::anyhow!(
+                "case branches must have same type: [{}]",
+                body_tys
+                    .iter()
+                    .map(|id| env.type_name(*id).map(|t| t.to_string()))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(", ")
+            ));
+        }
+        let ret_ty = body_tys[0];
+        Ok(ret_ty)
+    }
+}
+
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        log::debug!("type_check: {:?}", self);
+        let _span = tracing::debug_span!("", "{}", self).entered();
         let res = match self {
             Expr::Literal(value) => value.type_check(env),
             Expr::Variable(name) => env.get_variable(name),
@@ -135,8 +174,9 @@ impl TypeCheck for Expr {
             Expr::FnApp(app) => app.type_check(env),
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::TypeDef(type_def) => type_def.type_check(env),
+            Expr::Case(case) => case.type_check(env),
         }?;
-        log::debug!("type_check: {} : {} #{}", self, env.type_name(res)?, res);
+        log::debug!(":{} #{}", env.type_name(res)?, res);
         Ok(res)
     }
 }

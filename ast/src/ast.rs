@@ -98,9 +98,13 @@ impl Display for Let {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "let {} : {} = {}",
+            "let {}{} = {}",
             self.name,
-            self.typ.as_ref().unwrap_or(&Sexp::Empty),
+            if let Some(t) = self.typ.as_ref() {
+                format!(":{}", t)
+            } else {
+                "".to_string()
+            },
             self.value
         )
     }
@@ -125,14 +129,12 @@ impl Display for TypeDef {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct External(pub String);
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    External(External),
+    External(String),
     Bool(bool),
     Number(i64),
     Atom(String),
+    String(String),
     Record(HashMap<String, Expr>),
     List(Vec<Expr>),
 }
@@ -149,6 +151,13 @@ impl Value {
         match self {
             Value::Number(n) => Ok(*n),
             _ => Err(anyhow::anyhow!("not number")),
+        }
+    }
+
+    pub fn string(&self) -> Result<String> {
+        match self {
+            Value::String(s) => Ok(s.clone()),
+            _ => Err(anyhow::anyhow!("not string")),
         }
     }
 
@@ -177,9 +186,10 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::External(External(name)) => write!(f, "external({})", name),
+            Value::External(name) => write!(f, "(external {})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
+            Value::String(s) => write!(f, "'{}'", s),
             Value::Atom(atom) => write!(f, ":{}", atom),
             Value::Record(record) => write!(
                 f,
@@ -204,6 +214,32 @@ impl Display for Value {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Case {
+    // (pattern, body)
+    pub branches: Vec<(Expr, Expr)>,
+}
+
+impl Case {
+    pub fn new(branches: Vec<(Expr, Expr)>) -> Self {
+        Self { branches }
+    }
+}
+
+impl Display for Case {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(case\n  {}\n)",
+            self.branches
+                .iter()
+                .map(|(c, b)| format!("({} => {})", c, b))
+                .collect::<Vec<String>>()
+                .join("\n  ")
+        )
+    }
+}
+
 pub fn from_expr(expr: &Expr) -> Result<Value> {
     match expr {
         Expr::Literal(v) => Ok(v.clone()),
@@ -219,6 +255,7 @@ pub enum Expr {
     FnApp(FnApp),
     FnDef(FnDef),
     TypeDef(TypeDef),
+    Case(Case),
 }
 
 impl Expr {
@@ -250,6 +287,7 @@ impl Display for Expr {
             Expr::FnApp(fn_app) => write!(f, "{}", fn_app),
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
             Expr::TypeDef(type_def) => write!(f, "{}", type_def),
+            Expr::Case(case) => write!(f, "{}", case),
         }
     }
 }

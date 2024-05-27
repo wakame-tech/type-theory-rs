@@ -27,8 +27,8 @@ pub struct TypeEnv {
 
 pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
     Sexp::List(vec![
-        Sexp::String(FN_TYPE_KEYWORD.to_string()),
         Sexp::List(args),
+        Sexp::String(FN_TYPE_KEYWORD.to_string()),
         ret,
     ])
 }
@@ -69,6 +69,9 @@ impl Default for TypeEnv {
 
         let atom = env.new_type_str("atom").unwrap();
         env.new_subtype(atom, any);
+
+        let str = env.new_type_str("str").unwrap();
+        env.new_subtype(str, any);
 
         let vec = env.new_type_str("vec").unwrap();
         env.new_subtype(vec, any);
@@ -121,11 +124,13 @@ impl TypeEnv {
         if let Some(id) = self.id_map.get(&ty.to_string()) {
             return Ok(*id);
         }
+
         match ty {
             Sexp::String(v) if v.len() == 1 => {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::variable(id));
                 self.register_type_id(ty, id);
+                log::debug!("new_type variable: {} #{}", ty, id);
                 Ok(id)
             }
             Sexp::String(s) => {
@@ -141,14 +146,20 @@ impl TypeEnv {
 
                 Ok(id)
             }
-            Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
-                let args = list[1]
+            Sexp::List(list)
+                if list.len() == 3
+                    && list[1].is_string()
+                    && list[1].string()? == FN_TYPE_KEYWORD =>
+            {
+                anyhow::ensure!(list.len() == 3, "invalid function type {:?}", list);
+                let args = list[0]
                     .list()?
                     .iter()
                     .map(|s| self.new_type(s))
                     .collect::<Result<Vec<_>>>()?;
                 let ret = self.new_type(&list[2])?;
                 let id = self.alloc.issue_id();
+                log::debug!("new_type function: {} #{}", ty, id);
                 self.alloc.insert(Type::function(id, args, ret));
                 self.register_type_id(ty, id);
                 Ok(id)

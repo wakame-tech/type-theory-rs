@@ -4,7 +4,7 @@ use crate::{
     types::{Id, Type, LIST_TYPE_KEYWORD},
 };
 use anyhow::Result;
-use ast::ast::{Expr, External, FnApp, FnDef, Let, Value};
+use ast::ast::{Case, Expr, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use symbolic_expressions::parser::parse_str;
 
@@ -15,10 +15,11 @@ pub trait InferType {
 impl InferType for Value {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         match self {
-            Value::External(External(name)) => env.get_variable(name),
+            Value::External(_) => Err(anyhow::anyhow!("external value")),
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
             Value::Atom(atom) => env.new_type_str(format!(":{}", atom).as_str()),
+            Value::String(_) => env.get(&parse_str("str")?),
             Value::Record(fields) => {
                 let fields = fields
                     .iter()
@@ -59,13 +60,19 @@ impl InferType for FnApp {
         let new_fn_ty = env.alloc.issue_id();
         env.alloc
             .insert(Type::function(new_fn_ty, arg_ty_ids.clone(), ret_ty_id));
+
         log::debug!(
-            "#{} = ? -> ? vs #{} = #{:?} -> #{}",
-            fn_ty,
+            "\n([{}] -> {} #{})\n{}",
+            arg_ty_ids
+                .iter()
+                .map(|id| env.alloc.debug(*id))
+                .collect::<Result<Vec<_>>>()?
+                .join(" "),
+            env.alloc.debug(ret_ty_id)?,
             new_fn_ty,
-            arg_ty_ids,
-            ret_ty_id
+            env.alloc.debug(fn_ty)?
         );
+
         unify(env, new_fn_ty, fn_ty)?;
         Ok(prune(&mut env.alloc, ret_ty_id))
     }
@@ -109,8 +116,25 @@ impl InferType for Let {
     }
 }
 
+impl InferType for Case {
+    fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+        let Case { branches, .. } = self;
+        let mut ret_ty = None;
+        for (_, body) in branches {
+            let body_ty = body.infer_type(env, non_generic)?;
+            if let Some(ret_ty) = ret_ty {
+                unify(env, ret_ty, body_ty)?;
+            } else {
+                ret_ty = Some(body_ty);
+            }
+        }
+        Ok(ret_ty.unwrap())
+    }
+}
+
 impl InferType for Expr {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+        let _span = tracing::debug_span!("infer", "{}", self).entered();
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
@@ -123,8 +147,9 @@ impl InferType for Expr {
             Expr::FnDef(def) => def.infer_type(env, non_generic),
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
             Expr::TypeDef(type_def) => env.new_type(&type_def.typ),
+            Expr::Case(case) => case.infer_type(env, non_generic),
         }?;
-        // log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
+        log::debug!(":{}", env.type_name(ret)?);
         Ok(ret)
     }
 }
@@ -184,26 +209,21 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
     if a == b {
         return Ok(a);
     }
+    // log::debug!("unify#left  {}", env.alloc.debug(a)?);
+    // log::debug!("unify#right {}", env.alloc.debug(b)?);
     let (a_ty, b_ty) = (env.alloc.get(a)?, env.alloc.get(b)?);
-    // log::debug!(
-    //     "unify #{} = {} and #{} = {}",
-    //     a,
-    //     env.type_name(a)?,
-    //     b,
-    //     env.type_name(b)?
-    // );
     match (&a_ty, &b_ty) {
-        (_, Type::Variable { .. }) => unify(env, s, t),
         (Type::Variable { .. }, _) => {
             if a != b {
                 if occurs_in_type(&mut env.alloc, a, b) {
-                    panic!("recursive unification")
+                    return Err(anyhow::anyhow!("recursive unification"));
                 }
                 // log::debug!("type variable #{} := #{}", a, b);
                 env.alloc.get_mut(a)?.set_instance(b);
             }
             Ok(b)
         }
+        (_, Type::Variable { .. }) => unify(env, s, t),
         // unify fn type
         (
             Type::Function {
@@ -244,10 +264,30 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
             env.alloc.insert(Type::record(id, fields));
             Ok(id)
         }
+        (
+            Type::Container {
+                elements: a_elements,
+                id,
+            },
+            Type::Container {
+                elements: b_elements,
+                ..
+            },
+        ) => {
+            let elements = a_elements
+                .iter()
+                .zip(b_elements.iter())
+                .map(|(a, b)| unify(env, *a, *b))
+                .collect::<Result<Vec<_>>>()?;
+            env.alloc.insert(Type::container(*id, elements));
+            Ok(*id)
+        }
         _ => Err(anyhow::anyhow!(
-            "unify: type mismatch: {:?} != {:?}",
-            a_ty,
-            b_ty
+            "unify: type mismatch: {} #{} != {} #{}",
+            env.type_name(a)?,
+            a,
+            env.type_name(b)?,
+            b,
         )),
     }
 }
@@ -315,6 +355,7 @@ mod test {
         let expected = parse_str(type_expr)?;
         let exp = into_ast(&parse_str(expr)?)?;
         let infer_ty_id = exp.infer_type(env, &HashSet::new())?;
+        // log::debug!("{}", env.alloc.)
         let actual = env.type_name(infer_ty_id)?;
         assert_eq!(expected, actual);
         Ok(())
@@ -332,13 +373,13 @@ mod test {
     #[test]
     fn test_fn() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(fn (x : int) 1)", "(-> (int) int)")
+        should_infer(&mut env, "(fn (x : int) 1)", "((int) -> int)")
     }
 
     #[test]
     fn test_app() -> Result<()> {
         let mut env = TypeEnv::default();
-        let ty = env.new_type_str("(-> (bool) bool)")?;
+        let ty = env.new_type_str("((bool) -> bool)")?;
         env.set_variable("not", ty);
         should_infer(&mut env, "(not true)", "bool")
     }
@@ -346,7 +387,7 @@ mod test {
     #[test]
     fn test_let_app() -> Result<()> {
         let mut env = TypeEnv::default();
-        let ty = env.new_type_str("(-> (a) a)")?;
+        let ty = env.new_type_str("((a) -> a)")?;
         env.set_variable("id", ty);
         should_infer(&mut env, "(let a (id 1))", "int")
     }
@@ -354,14 +395,14 @@ mod test {
     #[test]
     fn test_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        let ty = env.new_type_str("(-> (a) a)")?;
+        let ty = env.new_type_str("((a) -> a)")?;
         env.set_variable("id", ty);
-        should_infer(&mut env, "id", "(-> (a) a)")
+        should_infer(&mut env, "id", "((a) -> a)")
     }
 
     #[test]
     fn test_fn_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(fn x y x)", "(-> (a b) a))")
+        should_infer(&mut env, "(fn x y x)", "((a b) -> a))")
     }
 }

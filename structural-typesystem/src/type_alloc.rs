@@ -47,6 +47,32 @@ impl TypeAlloc {
         self.as_sexp_rec(id, &mut Default::default(), 0)
     }
 
+    pub fn debug(&self, id: Id) -> Result<String> {
+        match self.get(id)? {
+            Type::Primitive { id, name } => Ok(format!("{}_#{}", name, id)),
+            Type::Variable { id, .. } => Ok(format!("?_#{}", id)),
+            Type::Function { id, args, ret } => Ok(format!(
+                "([{}] -> {} #{})",
+                args.iter()
+                    .map(|arg| self.debug(*arg))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(" "),
+                self.debug(ret)?,
+                id,
+            )),
+            Type::Record { id, fields } => Ok(format!("(record_#{} {:?})", id, fields)),
+            Type::Container { id, elements } => Ok(format!(
+                "({} {})",
+                self.debug(id)?,
+                elements
+                    .iter()
+                    .map(|id| self.debug(*id))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(" ")
+            )),
+        }
+    }
+
     fn as_sexp_rec(&self, id: Id, issuer: &mut Issuer, nest: usize) -> Result<TypeExpr> {
         if nest > 10 {
             return Err(anyhow!("cyclic type"));
@@ -60,14 +86,14 @@ impl TypeAlloc {
                 ..
             } => self.as_sexp_rec(inst, issuer, nest + 1),
             // type variables
-            Type::Variable { id, .. } => Ok(Sexp::String(issuer.name(id))),
+            Type::Variable { id, .. } => Ok(Sexp::String(issuer.name(id).to_string())),
             Type::Function { args, ret, .. } => Ok(Sexp::List(vec![
-                Sexp::String("->".to_string()),
                 Sexp::List(
                     args.iter()
                         .map(|arg| self.as_sexp_rec(*arg, issuer, nest + 1))
                         .collect::<Result<Vec<_>>>()?,
                 ),
+                Sexp::String("->".to_string()),
                 self.as_sexp_rec(ret, issuer, nest + 1)?,
             ])),
             Type::Record { fields, .. } => {
@@ -134,23 +160,22 @@ impl TypeAlloc {
 
 #[cfg(test)]
 mod tests {
-    use crate::type_env::TypeEnv;
+    use crate::{tests::setup, type_env::TypeEnv};
     use anyhow::Result;
     use symbolic_expressions::parser::parse_str;
 
     #[test]
     fn parse_fn_type() -> Result<()> {
+        setup();
         let mut type_env = TypeEnv::default();
-        let int_int = type_env.new_type(&parse_str("(-> (int) int)")?)?;
-        assert_eq!(
-            type_env.alloc.as_sexp(int_int)?,
-            parse_str("(-> (int) int)")?,
-        );
+        let int_int = type_env.new_type(&parse_str("((int) -> int)")?)?;
+        assert_eq!(type_env.type_name(int_int)?, parse_str("((int) -> int)")?,);
         Ok(())
     }
 
     #[test]
     fn parse_record_type() -> Result<()> {
+        setup();
         let mut type_env = TypeEnv::default();
         let rec = type_env.new_type(&parse_str("(record (a : int))")?)?;
         assert_eq!(

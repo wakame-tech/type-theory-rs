@@ -11,3 +11,7 @@ symbolic_expressions = "5.0.3"
 petgraph = "0.6.3"
 ptree = "0.4.0"
 ast = { path = "../ast" }
+tracing = "0.1.40"
+
+[dev-dependencies]
+tracing-subscriber = "0.3.18"

@@ -1,4 +1,4 @@
-use crate::ast::{Expr, FnApp, FnDef, Let, Parameter, TypeDef, Value};
+use crate::ast::{Case, Expr, FnApp, FnDef, Let, Parameter, TypeDef, Value};
 use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
@@ -8,6 +8,8 @@ pub const FN_KEYWORD: &str = "fn";
 pub const RECORD_KEYWORD: &str = "record";
 pub const LIST_KEYWORD: &str = "vec";
 pub const TYPE_KEYWORD: &str = "type";
+pub const CASE_KEYWORD: &str = "case";
+pub const EXTERNAL_KEYWORD: &str = "external";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     match sexp {
@@ -97,13 +99,35 @@ fn is_number(s: &str) -> bool {
     s.chars().all(|c| c.is_numeric())
 }
 
+pub fn parse_case(branches: &[Sexp]) -> Result<Expr> {
+    let branches = branches
+        .iter()
+        .map(|branch| {
+            let branch = branch.list()?;
+            let pattern = into_ast(&branch[0])?;
+            anyhow::ensure!(
+                branch[1].is_string() && branch[1].string()? == "=>",
+                "missing =>"
+            );
+            let body = into_ast(&branch[2])?;
+            Ok((pattern, body))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Expr::Case(Case::new(branches)))
+}
+
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
-    log::debug!("sexp: {}", sexp);
+    let _span = tracing::debug_span!("", "{}", sexp).entered();
     let expr = match sexp {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref head) if head == FN_KEYWORD => parse_fn(list),
             Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
             Sexp::String(ref head) if head == TYPE_KEYWORD => parse_type(sexp),
+            Sexp::String(ref head) if head == CASE_KEYWORD => parse_case(&list[1..]),
+
+            _ if list[0].is_string() && list[0].string()?.as_str() == EXTERNAL_KEYWORD => Ok(
+                Expr::Literal(Value::External(list[1].string()?.to_string())),
+            ),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }
@@ -114,6 +138,9 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         },
         Sexp::String(lit) => match lit.as_str() {
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
+            _ if lit.starts_with('\'') && lit.ends_with('\'') => Ok(Expr::Literal(Value::String(
+                lit[1..lit.len() - 1].to_string(),
+            ))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),
             _ if lit.starts_with(':') => Ok(Expr::Literal(Value::Atom(
                 lit.trim_start_matches(':').to_string(),
@@ -122,7 +149,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         },
         _ => Err(anyhow::anyhow!("invalid sexp: {}", sexp)),
     }?;
-    log::debug!("-> ast: {}", expr);
+    log::debug!("={}", expr);
     Ok(expr)
 }
 
@@ -154,6 +181,11 @@ mod tests {
     #[test]
     fn atom_literal() -> Result<()> {
         should_be_ast(":atom", &Expr::Literal(Value::Atom("atom".to_string())))
+    }
+
+    #[test]
+    fn string_literal() -> Result<()> {
+        should_be_ast("'str'", &Expr::Literal(Value::String("str".to_string())))
     }
 
     #[test]
@@ -257,5 +289,20 @@ mod tests {
             Sexp::String("int".to_string()),
         ));
         should_be_ast("(type a : int)", &expr)
+    }
+
+    #[test]
+    fn case() -> Result<()> {
+        let expr = Expr::Case(crate::ast::Case::new(vec![
+            (
+                Expr::Literal(Value::Number(1)),
+                Expr::Literal(Value::Number(2)),
+            ),
+            (
+                Expr::Literal(Value::Number(3)),
+                Expr::Literal(Value::Number(4)),
+            ),
+        ]));
+        should_be_ast("(case (1 => 2) (3 => 4))", &expr)
     }
 }
