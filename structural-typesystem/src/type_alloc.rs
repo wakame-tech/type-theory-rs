@@ -86,7 +86,7 @@ impl TypeAlloc {
                 ..
             } => self.as_sexp_rec(inst, issuer, nest + 1),
             // type variables
-            Type::Variable { id, .. } => Ok(Sexp::String(issuer.name(id))),
+            Type::Variable { id, .. } => Ok(Sexp::String(format!("{}_#{}", issuer.name(id), id))),
             Type::Function { args, ret, .. } => Ok(Sexp::List(vec![
                 Sexp::String("->".to_string()),
                 Sexp::List(

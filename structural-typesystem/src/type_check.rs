@@ -159,7 +159,7 @@ impl TypeCheck for Case {
 
 impl TypeCheck for Expr {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        log::debug!("type_check: {}", self);
+        let _span = tracing::debug_span!("", "{}", self).entered();
         let res = match self {
             Expr::Literal(value) => value.type_check(env),
             Expr::Variable(name) => env.get_variable(name),
@@ -169,7 +169,7 @@ impl TypeCheck for Expr {
             Expr::TypeDef(type_def) => type_def.type_check(env),
             Expr::Case(case) => case.type_check(env),
         }?;
-        log::debug!("type_check: {} : {} #{}", self, env.type_name(res)?, res);
+        log::debug!(":{} #{}", env.type_name(res)?, res);
         Ok(res)
     }
 }

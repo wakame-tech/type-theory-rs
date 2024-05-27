@@ -116,7 +116,7 @@ pub fn parse_case(branches: &[Sexp]) -> Result<Expr> {
 }
 
 pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
-    log::debug!("sexp: {}", sexp);
+    let _span = tracing::debug_span!("", "{}", sexp).entered();
     let expr = match sexp {
         Sexp::List(list) => match list[0] {
             Sexp::String(ref head) if head == FN_KEYWORD => parse_fn(list),
@@ -144,7 +144,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         },
         _ => Err(anyhow::anyhow!("invalid sexp: {}", sexp)),
     }?;
-    log::debug!("-> ast: {}", expr);
+    log::debug!("={}", expr);
     Ok(expr)
 }
 

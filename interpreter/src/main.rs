@@ -1,7 +1,6 @@
 use crate::{environment::Environment, eval::Eval, externals::define_externals};
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
-use simple_logger::SimpleLogger;
 use std::{env, fs::File, io::Read};
 use structural_typesystem::{type_check::TypeCheck, type_env::TypeEnv};
 use symbolic_expressions::parser::parse_str;
@@ -25,10 +24,11 @@ fn parse(program: &str) -> Result<Program> {
 }
 
 fn main() -> Result<()> {
-    SimpleLogger::new()
-        .without_timestamps()
-        .with_level(log::LevelFilter::Debug)
-        .init()?;
+    tracing_subscriber::fmt()
+        .without_time()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_line_number(true)
+        .init();
 
     let args = env::args().collect::<Vec<_>>();
     let ml_path = args.get(1).ok_or(anyhow::anyhow!("require ml_path"))?;

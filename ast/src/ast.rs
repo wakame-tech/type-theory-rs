@@ -98,9 +98,13 @@ impl Display for Let {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "let {} : {} = {}",
+            "let {}{} = {}",
             self.name,
-            self.typ.as_ref().unwrap_or(&Sexp::Empty),
+            if let Some(t) = self.typ.as_ref() {
+                format!(":{}", t)
+            } else {
+                "".to_string()
+            },
             self.value
         )
     }

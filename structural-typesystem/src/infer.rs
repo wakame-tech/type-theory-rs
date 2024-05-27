@@ -60,9 +60,9 @@ impl InferType for FnApp {
         let new_fn_ty = env.alloc.issue_id();
         env.alloc
             .insert(Type::function(new_fn_ty, arg_ty_ids.clone(), ret_ty_id));
+
         log::debug!(
-            "[app] {}: (->_#{} [{}] {})",
-            self,
+            "\n(->_#{} [{}] {})\n{}",
             new_fn_ty,
             arg_ty_ids
                 .iter()
@@ -70,8 +70,9 @@ impl InferType for FnApp {
                 .collect::<Result<Vec<_>>>()?
                 .join(" "),
             env.alloc.debug(ret_ty_id)?,
+            env.alloc.debug(fn_ty)?
         );
-        log::debug!("[def] {}", env.alloc.debug(fn_ty)?,);
+
         unify(env, new_fn_ty, fn_ty)?;
         Ok(prune(&mut env.alloc, ret_ty_id))
     }
@@ -133,6 +134,7 @@ impl InferType for Case {
 
 impl InferType for Expr {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
+        let _span = tracing::debug_span!("infer", "{}", self).entered();
         let ret = match self {
             Expr::Literal(value) => value.infer_type(env, non_generic),
             Expr::Variable(name) => {
@@ -147,7 +149,7 @@ impl InferType for Expr {
             Expr::TypeDef(type_def) => env.new_type(&type_def.typ),
             Expr::Case(case) => case.infer_type(env, non_generic),
         }?;
-        // log::debug!("infer_type {} : {}", self, env.type_name(ret)?);
+        log::debug!(":{}", env.type_name(ret)?);
         Ok(ret)
     }
 }

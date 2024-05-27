@@ -133,6 +133,7 @@ impl TypeEnv {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::variable(id));
                 self.register_type_id(ty, id);
+                log::debug!("new_type variable: {} #{}", ty, id);
                 Ok(id)
             }
             Sexp::String(s) => {
@@ -149,6 +150,7 @@ impl TypeEnv {
                 Ok(id)
             }
             Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
+                anyhow::ensure!(list.len() == 3, "invalid function type {:?}", list);
                 let args = list[1]
                     .list()?
                     .iter()
