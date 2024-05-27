@@ -256,6 +256,7 @@ pub enum Expr {
     FnDef(FnDef),
     TypeDef(TypeDef),
     Case(Case),
+    Include(String),
 }
 
 impl Expr {
@@ -288,6 +289,7 @@ impl Display for Expr {
             Expr::FnDef(fn_def) => write!(f, "{}", fn_def),
             Expr::TypeDef(type_def) => write!(f, "{}", type_def),
             Expr::Case(case) => write!(f, "{}", case),
+            Expr::Include(file) => write!(f, "(include \"{}\")", file),
         }
     }
 }

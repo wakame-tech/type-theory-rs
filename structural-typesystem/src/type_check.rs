@@ -175,6 +175,7 @@ impl TypeCheck for Expr {
             Expr::FnDef(fn_def) => fn_def.type_check(env),
             Expr::TypeDef(type_def) => type_def.type_check(env),
             Expr::Case(case) => case.type_check(env),
+            Expr::Include(_) => Ok(env.new_type_str("str")?),
         }?;
         log::debug!(":{} #{}", env.type_name(res)?, res);
         Ok(res)
