@@ -160,23 +160,22 @@ impl TypeAlloc {
 
 #[cfg(test)]
 mod tests {
-    use crate::type_env::TypeEnv;
+    use crate::{tests::setup, type_env::TypeEnv};
     use anyhow::Result;
     use symbolic_expressions::parser::parse_str;
 
     #[test]
     fn parse_fn_type() -> Result<()> {
+        setup();
         let mut type_env = TypeEnv::default();
-        let int_int = type_env.new_type(&parse_str("(-> (int) int)")?)?;
-        assert_eq!(
-            type_env.alloc.as_sexp(int_int)?,
-            parse_str("(-> (int) int)")?,
-        );
+        let int_int = type_env.new_type(&parse_str("((int) -> int)")?)?;
+        assert_eq!(type_env.type_name(int_int)?, parse_str("((int) -> int)")?,);
         Ok(())
     }
 
     #[test]
     fn parse_record_type() -> Result<()> {
+        setup();
         let mut type_env = TypeEnv::default();
         let rec = type_env.new_type(&parse_str("(record (a : int))")?)?;
         assert_eq!(

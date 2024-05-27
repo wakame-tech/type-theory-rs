@@ -129,11 +129,8 @@ impl Display for TypeDef {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct External(pub String);
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    External(External),
+    External(String),
     Bool(bool),
     Number(i64),
     Atom(String),
@@ -189,7 +186,7 @@ impl Value {
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::External(External(name)) => write!(f, "(external {})", name),
+            Value::External(name) => write!(f, "(external {})", name),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "'{}'", s),

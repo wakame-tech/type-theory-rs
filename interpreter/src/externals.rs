@@ -1,74 +1,7 @@
 use crate::{environment::Environment, eval::Eval};
 use anyhow::Result;
-use ast::ast::{Expr, External, FnApp, FnDef, Parameter, Value};
-use structural_typesystem::type_env::{arrow, TypeEnv};
-use symbolic_expressions::parser::parse_str;
-
-pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result<()> {
-    let int = || parse_str("int").unwrap();
-    let bool = || parse_str("bool").unwrap();
-
-    for (name, args, ret) in [
-        ("+", vec![("a", int()), ("b", int())], int()),
-        ("-", vec![("a", int()), ("b", int())], int()),
-        ("%", vec![("a", int()), ("b", int())], int()),
-        ("not", vec![("a", bool())], bool()),
-        ("&", vec![("a", bool()), ("b", bool())], bool()),
-        ("|", vec![("a", bool()), ("b", bool())], bool()),
-        ("==", vec![("a", int()), ("b", int())], bool()),
-        ("!=", vec![("a", int()), ("b", int())], bool()),
-        ("dbg", vec![("a", parse_str("a")?)], parse_str("a")?),
-        // ("id", vec![("a", parse_str("a")?)], parse_str("a")?),
-        (
-            "[]",
-            vec![("r", parse_str("a")?), ("k", parse_str("b")?)],
-            parse_str("([] a b)")?,
-        ),
-        // (
-        //     "map",
-        //     vec![
-        //         ("f", parse_str("((a) -> b)")?),
-        //         ("v", parse_str("(vec a)")?),
-        //     ],
-        //     parse_str("(vec b)")?,
-        // ),
-        // (
-        //     "map",
-        //     vec![
-        //         ("f", parse_str("(-> (a) b)")?),
-        //         ("v", parse_str("(vec a)")?),
-        //     ],
-        //     parse_str("(vec b)")?,
-        // ),
-        (
-            "filter",
-            vec![
-                ("f", parse_str("((a) -> bool)")?),
-                ("v", parse_str("(vec a)")?),
-            ],
-            parse_str("(vec a)")?,
-        ),
-        (
-            "range",
-            vec![("start", int()), ("end", int())],
-            parse_str("(vec int)")?,
-        ),
-        ("to_string", vec![("v", parse_str("a")?)], parse_str("str")?),
-    ] {
-        let ty = arrow(args.iter().map(|(_, arg)| arg).cloned().collect(), ret);
-        let id = type_env.new_type(&ty)?;
-        type_env.set_variable(name, id);
-
-        let def = Expr::FnDef(FnDef::new(
-            args.into_iter()
-                .map(|(name, typ)| Parameter::new(name.to_string(), Some(typ)))
-                .collect(),
-            Box::new(Expr::Literal(Value::External(External(name.to_string())))),
-        ));
-        env.variables.insert(name.to_string(), def);
-    }
-    Ok(())
-}
+use ast::ast::{Expr, FnApp, Value};
+use structural_typesystem::type_env::TypeEnv;
 
 pub fn eval_externals(
     t_env: &mut TypeEnv,

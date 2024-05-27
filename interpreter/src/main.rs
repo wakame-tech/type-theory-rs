@@ -1,4 +1,4 @@
-use crate::{environment::Environment, eval::Eval, externals::define_externals};
+use crate::{environment::Environment, eval::Eval};
 use anyhow::Result;
 use ast::{ast::Program, into_ast::into_ast};
 use std::{env, fs::File, io::Read, path::PathBuf};
@@ -38,22 +38,44 @@ pub fn setup_logger() {
         .init();
 }
 
+fn eval_prelude(type_env: &mut TypeEnv, env: Environment) -> Result<Environment> {
+    let prelude =
+        import(&project_root::get_project_root()?.join(&PathBuf::from("codes/prelude.sexp")))?;
+    prelude.type_check(type_env)?;
+    let (_, env) = prelude.eval(type_env, env)?;
+    Ok(env)
+}
+
 fn main() -> Result<()> {
-    setup_logger();
     let args = env::args().collect::<Vec<_>>();
     let ml_path = args.get(1).ok_or(anyhow::anyhow!("require ml_path"))?;
-    let prelude = import(&PathBuf::from("codes/prelude.sexp"))?;
     let program = import(&PathBuf::from(ml_path))?;
 
     let mut type_env = TypeEnv::default();
-    let mut env = Environment::new(None);
-    define_externals(&mut type_env, &mut env).unwrap();
+    let env = Environment::new(None);
 
-    prelude.type_check(&mut type_env)?;
+    let env = eval_prelude(&mut type_env, env)?;
+    setup_logger();
     program.type_check(&mut type_env)?;
-    log::debug!("eval prelude");
-    let (_, env) = prelude.eval(&mut type_env, env)?;
     let (ret, _) = program.eval(&mut type_env, env)?;
     log::debug!("{}", &ret);
     Ok(())
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    pub fn setup() {
+        INIT.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_test_writer()
+                .without_time()
+                .with_max_level(tracing::Level::DEBUG)
+                .with_line_number(true)
+                .init();
+        });
+    }
 }

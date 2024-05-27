@@ -1,4 +1,2 @@
-(let f (fn (a : int) (b : int) (c : int)
-    (+ (+ (dbg a) (dbg b)) c)
-))
-(f 1 2 3)
+(let g (fn x (fn y (+ x y))))
+((g 1) ((g 2) 3))

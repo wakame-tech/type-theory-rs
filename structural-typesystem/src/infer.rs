@@ -4,7 +4,7 @@ use crate::{
     types::{Id, Type, LIST_TYPE_KEYWORD},
 };
 use anyhow::Result;
-use ast::ast::{Case, Expr, External, FnApp, FnDef, Let, Value};
+use ast::ast::{Case, Expr, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use symbolic_expressions::parser::parse_str;
 
@@ -15,7 +15,7 @@ pub trait InferType {
 impl InferType for Value {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         match self {
-            Value::External(External(_)) => Err(anyhow::anyhow!("external value")),
+            Value::External(_) => Err(anyhow::anyhow!("external value")),
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
             Value::Atom(atom) => env.new_type_str(format!(":{}", atom).as_str()),
@@ -62,14 +62,14 @@ impl InferType for FnApp {
             .insert(Type::function(new_fn_ty, arg_ty_ids.clone(), ret_ty_id));
 
         log::debug!(
-            "\n(->_#{} [{}] {})\n{}",
-            new_fn_ty,
+            "\n([{}] -> {} #{})\n{}",
             arg_ty_ids
                 .iter()
                 .map(|id| env.alloc.debug(*id))
                 .collect::<Result<Vec<_>>>()?
                 .join(" "),
             env.alloc.debug(ret_ty_id)?,
+            new_fn_ty,
             env.alloc.debug(fn_ty)?
         );
 
@@ -373,13 +373,13 @@ mod test {
     #[test]
     fn test_fn() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(fn (x : int) 1)", "(-> (int) int)")
+        should_infer(&mut env, "(fn (x : int) 1)", "((int) -> int)")
     }
 
     #[test]
     fn test_app() -> Result<()> {
         let mut env = TypeEnv::default();
-        let ty = env.new_type_str("(-> (bool) bool)")?;
+        let ty = env.new_type_str("((bool) -> bool)")?;
         env.set_variable("not", ty);
         should_infer(&mut env, "(not true)", "bool")
     }
@@ -387,7 +387,7 @@ mod test {
     #[test]
     fn test_let_app() -> Result<()> {
         let mut env = TypeEnv::default();
-        let ty = env.new_type_str("(-> (a) a)")?;
+        let ty = env.new_type_str("((a) -> a)")?;
         env.set_variable("id", ty);
         should_infer(&mut env, "(let a (id 1))", "int")
     }
@@ -395,14 +395,14 @@ mod test {
     #[test]
     fn test_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        let ty = env.new_type_str("(-> (a) a)")?;
+        let ty = env.new_type_str("((a) -> a)")?;
         env.set_variable("id", ty);
-        should_infer(&mut env, "id", "(-> (a) a)")
+        should_infer(&mut env, "id", "((a) -> a)")
     }
 
     #[test]
     fn test_fn_tvar() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(fn x y x)", "(-> (a b) a))")
+        should_infer(&mut env, "(fn x y x)", "((a b) -> a))")
     }
 }

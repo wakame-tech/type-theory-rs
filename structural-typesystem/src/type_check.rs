@@ -5,7 +5,8 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Case, Expr, External, FnApp, FnDef, Let, Program, TypeDef, Value};
+use ast::ast::{Case, Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
+
 use std::collections::{BTreeMap, HashSet};
 
 pub trait TypeCheck {
@@ -79,10 +80,7 @@ impl TypeCheck for FnDef {
 impl TypeCheck for Let {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         log::debug!("let {} = {}", self.name, self.value);
-        let use_decl_type = matches!(
-            self.value.as_ref(),
-            Expr::Literal(Value::External(External(_)))
-        );
+        let use_decl_type = matches!(self.value.as_ref(), Expr::Literal(Value::External(_)));
 
         let let_ty = if self.typ.is_some() || use_decl_type {
             let decl_ty = self.typ.as_ref().unwrap();

@@ -1,4 +1,4 @@
-use crate::ast::{Case, Expr, External, FnApp, FnDef, Let, Parameter, TypeDef, Value};
+use crate::ast::{Case, Expr, FnApp, FnDef, Let, Parameter, TypeDef, Value};
 use anyhow::Result;
 use std::collections::HashMap;
 use symbolic_expressions::Sexp;
@@ -124,9 +124,10 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
             Sexp::String(ref head) if head == TYPE_KEYWORD => parse_type(sexp),
             Sexp::String(ref head) if head == CASE_KEYWORD => parse_case(&list[1..]),
-            Sexp::String(ref head) if head == EXTERNAL_KEYWORD => Ok(Expr::Literal(
-                Value::External(External(list[1].string()?.to_string())),
-            )),
+
+            _ if list[0].is_string() && list[0].string()?.as_str() == EXTERNAL_KEYWORD => Ok(
+                Expr::Literal(Value::External(list[1].string()?.to_string())),
+            ),
             _ if list[0].is_string() && list[0].string()?.as_str() == RECORD_KEYWORD => {
                 Ok(Expr::Literal(parse_record(&list[1..])?))
             }

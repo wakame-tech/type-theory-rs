@@ -124,6 +124,7 @@ impl TypeEnv {
         if let Some(id) = self.id_map.get(&ty.to_string()) {
             return Ok(*id);
         }
+
         match ty {
             Sexp::String(v) if v.len() == 1 => {
                 let id = self.alloc.issue_id();
@@ -145,7 +146,11 @@ impl TypeEnv {
 
                 Ok(id)
             }
-            Sexp::List(list) if list[1].string()? == FN_TYPE_KEYWORD => {
+            Sexp::List(list)
+                if list.len() == 3
+                    && list[1].is_string()
+                    && list[1].string()? == FN_TYPE_KEYWORD =>
+            {
                 anyhow::ensure!(list.len() == 3, "invalid function type {:?}", list);
                 let args = list[0]
                     .list()?
@@ -154,6 +159,7 @@ impl TypeEnv {
                     .collect::<Result<Vec<_>>>()?;
                 let ret = self.new_type(&list[2])?;
                 let id = self.alloc.issue_id();
+                log::debug!("new_type function: {} #{}", ty, id);
                 self.alloc.insert(Type::function(id, args, ret));
                 self.register_type_id(ty, id);
                 Ok(id)
