@@ -1,3 +1,5 @@
+(include std/prelude.sexp)
+
 (let fizzbuzz
     (fn (x : int)
         (case

@@ -1,7 +1,7 @@
-use crate::{environment::Environment, externals::eval_externals};
+use crate::{environment::Environment, externals::eval_externals, include};
 use anyhow::{anyhow, Ok, Result};
 use ast::ast::{Case, Expr, FnApp, FnDef, Let, Parameter, Program, Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use structural_typesystem::{type_env::TypeEnv, types::Type};
 
 pub trait Eval {
@@ -68,7 +68,7 @@ impl Eval for Let {
                 )),
             );
         } else {
-            env.insert(&self.name, *self.value.clone());
+            env.insert(&self.name, value.clone());
         }
         Ok((value, env))
     }
@@ -119,6 +119,12 @@ impl Eval for Expr {
             Expr::Literal(lit) => lit.eval(t_env, env),
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
             Expr::Case(case) => case.eval(t_env, env),
+            Expr::Include(path) => {
+                let path = project_root::get_project_root()?.join(PathBuf::from(path));
+                log::debug!("{}", path.display());
+                let program = include(&path)?;
+                program.eval(t_env, env)
+            }
             e @ Expr::TypeDef(_) => Ok((e.clone(), env)),
         }?;
         log::debug!("= {}", res);
@@ -142,9 +148,9 @@ impl Eval for Program {
 #[cfg(test)]
 mod tests {
     use super::Eval;
-    use crate::{environment::Environment, eval_prelude, parse, tests::setup};
+    use crate::{environment::Environment, parse, tests::setup};
     use anyhow::Result;
-    use ast::into_ast::into_ast;
+    use ast::{ast::Expr, into_ast::into_ast};
     use structural_typesystem::type_env::TypeEnv;
     use symbolic_expressions::parser::parse_str;
 
@@ -154,7 +160,7 @@ mod tests {
 
         let mut type_env = TypeEnv::default();
         let env = Environment::new(None);
-        let env = eval_prelude(&mut type_env, env)?;
+        let (_, env) = Expr::Include("std/prelude.sexp".to_string()).eval(&mut type_env, env)?;
         setup();
         let (evaluated, _) = expr.eval(&mut type_env, env)?;
         assert_eq!(evaluated, expected);

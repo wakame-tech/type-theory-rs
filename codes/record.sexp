@@ -1,3 +1,5 @@
+(include std/prelude.sexp)
+
 (type t : (record
     (x : int)
     (y : bool)

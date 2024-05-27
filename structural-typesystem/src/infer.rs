@@ -148,6 +148,7 @@ impl InferType for Expr {
             Expr::Let(r#let) => r#let.infer_type(env, non_generic),
             Expr::TypeDef(type_def) => env.new_type(&type_def.typ),
             Expr::Case(case) => case.infer_type(env, non_generic),
+            Expr::Include(_) => env.new_type_str("str"),
         }?;
         log::debug!(":{}", env.type_name(ret)?);
         Ok(ret)

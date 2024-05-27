@@ -10,6 +10,7 @@ pub const LIST_KEYWORD: &str = "vec";
 pub const TYPE_KEYWORD: &str = "type";
 pub const CASE_KEYWORD: &str = "case";
 pub const EXTERNAL_KEYWORD: &str = "external";
+pub const INCLUDE_KEYWORD: &str = "include";
 
 fn parse_parameter(sexp: &Sexp) -> Result<Parameter> {
     match sexp {
@@ -124,7 +125,9 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
             Sexp::String(ref head) if head == LET_KEYWORD => parse_let(sexp),
             Sexp::String(ref head) if head == TYPE_KEYWORD => parse_type(sexp),
             Sexp::String(ref head) if head == CASE_KEYWORD => parse_case(&list[1..]),
-
+            Sexp::String(ref head) if head == INCLUDE_KEYWORD => {
+                Ok(Expr::Include(list[1].string()?.to_string()))
+            }
             _ if list[0].is_string() && list[0].string()?.as_str() == EXTERNAL_KEYWORD => Ok(
                 Expr::Literal(Value::External(list[1].string()?.to_string())),
             ),
