@@ -120,7 +120,7 @@ impl Eval for Expr {
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
             Expr::Case(case) => case.eval(t_env, env),
             Expr::Include(path) => {
-                let path = project_root::get_project_root()?.join(&PathBuf::from(path));
+                let path = project_root::get_project_root()?.join(PathBuf::from(path));
                 log::debug!("{}", path.display());
                 let program = include(&path)?;
                 program.eval(t_env, env)
