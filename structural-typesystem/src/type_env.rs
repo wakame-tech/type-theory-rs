@@ -27,8 +27,8 @@ pub struct TypeEnv {
 
 pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
     Sexp::List(vec![
-        Sexp::String(FN_TYPE_KEYWORD.to_string()),
         Sexp::List(args),
+        Sexp::String(FN_TYPE_KEYWORD.to_string()),
         ret,
     ])
 }
@@ -121,12 +121,8 @@ impl TypeEnv {
     }
 
     pub fn new_type(&mut self, ty: &TypeExpr) -> Result<Id> {
-        // type variable treated as different type if it has same name
-        let is_variable = ty.is_string() && ty.string()?.len() == 1;
-        if !is_variable {
-            if let Some(id) = self.id_map.get(&ty.to_string()) {
-                return Ok(*id);
-            }
+        if let Some(id) = self.id_map.get(&ty.to_string()) {
+            return Ok(*id);
         }
         match ty {
             Sexp::String(v) if v.len() == 1 => {
@@ -149,9 +145,9 @@ impl TypeEnv {
 
                 Ok(id)
             }
-            Sexp::List(list) if list[0].string()? == FN_TYPE_KEYWORD => {
+            Sexp::List(list) if list[1].string()? == FN_TYPE_KEYWORD => {
                 anyhow::ensure!(list.len() == 3, "invalid function type {:?}", list);
-                let args = list[1]
+                let args = list[0]
                     .list()?
                     .iter()
                     .map(|s| self.new_type(s))

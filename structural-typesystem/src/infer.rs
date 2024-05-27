@@ -15,7 +15,7 @@ pub trait InferType {
 impl InferType for Value {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         match self {
-            Value::External(External(name)) => env.get_variable(name),
+            Value::External(External(_)) => Err(anyhow::anyhow!("external value")),
             Value::Bool(_) => env.get(&parse_str("bool")?),
             Value::Number(_) => env.get(&parse_str("int")?),
             Value::Atom(atom) => env.new_type_str(format!(":{}", atom).as_str()),

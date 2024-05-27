@@ -52,13 +52,13 @@ impl TypeAlloc {
             Type::Primitive { id, name } => Ok(format!("{}_#{}", name, id)),
             Type::Variable { id, .. } => Ok(format!("?_#{}", id)),
             Type::Function { id, args, ret } => Ok(format!(
-                "(->_#{} [{}] {})",
-                id,
+                "([{}] -> {} #{})",
                 args.iter()
                     .map(|arg| self.debug(*arg))
                     .collect::<Result<Vec<_>>>()?
                     .join(" "),
                 self.debug(ret)?,
+                id,
             )),
             Type::Record { id, fields } => Ok(format!("(record_#{} {:?})", id, fields)),
             Type::Container { id, elements } => Ok(format!(
@@ -86,14 +86,14 @@ impl TypeAlloc {
                 ..
             } => self.as_sexp_rec(inst, issuer, nest + 1),
             // type variables
-            Type::Variable { id, .. } => Ok(Sexp::String(format!("{}_#{}", issuer.name(id), id))),
+            Type::Variable { id, .. } => Ok(Sexp::String(format!("{}", issuer.name(id)))),
             Type::Function { args, ret, .. } => Ok(Sexp::List(vec![
-                Sexp::String("->".to_string()),
                 Sexp::List(
                     args.iter()
                         .map(|arg| self.as_sexp_rec(*arg, issuer, nest + 1))
                         .collect::<Result<Vec<_>>>()?,
                 ),
+                Sexp::String("->".to_string()),
                 self.as_sexp_rec(ret, issuer, nest + 1)?,
             ])),
             Type::Record { fields, .. } => {

@@ -665,6 +665,7 @@ dependencies = [
  "simple_logger",
  "symbolic_expressions",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

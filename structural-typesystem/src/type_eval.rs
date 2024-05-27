@@ -38,7 +38,7 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
 pub fn type_eval(env: &mut TypeEnv, id: Id) -> Result<Id> {
     let t = env.type_name(id)?;
     match t {
-        Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
+        Sexp::List(list) if list[0].is_string() && list[0].string()? == GETTER_TYPE_KEYWORD => {
             let (record, key) = (env.new_type(&list[1])?, env.new_type(&list[2])?);
             eval_type_access(env, record, key)
         }

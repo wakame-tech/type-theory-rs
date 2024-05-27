@@ -18,32 +18,32 @@ pub fn define_externals(type_env: &mut TypeEnv, env: &mut Environment) -> Result
         ("==", vec![("a", int()), ("b", int())], bool()),
         ("!=", vec![("a", int()), ("b", int())], bool()),
         ("dbg", vec![("a", parse_str("a")?)], parse_str("a")?),
-        ("id", vec![("a", parse_str("a")?)], parse_str("a")?),
+        // ("id", vec![("a", parse_str("a")?)], parse_str("a")?),
         (
             "[]",
             vec![("r", parse_str("a")?), ("k", parse_str("b")?)],
             parse_str("([] a b)")?,
         ),
-        (
-            "map",
-            vec![
-                ("f", parse_str("(-> (a) b)")?),
-                ("v", parse_str("(vec a)")?),
-            ],
-            parse_str("(vec b)")?,
-        ),
-        (
-            "map",
-            vec![
-                ("f", parse_str("(-> (a) b)")?),
-                ("v", parse_str("(vec a)")?),
-            ],
-            parse_str("(vec b)")?,
-        ),
+        // (
+        //     "map",
+        //     vec![
+        //         ("f", parse_str("((a) -> b)")?),
+        //         ("v", parse_str("(vec a)")?),
+        //     ],
+        //     parse_str("(vec b)")?,
+        // ),
+        // (
+        //     "map",
+        //     vec![
+        //         ("f", parse_str("(-> (a) b)")?),
+        //         ("v", parse_str("(vec a)")?),
+        //     ],
+        //     parse_str("(vec b)")?,
+        // ),
         (
             "filter",
             vec![
-                ("f", parse_str("(-> (a) bool)")?),
+                ("f", parse_str("((a) -> bool)")?),
                 ("v", parse_str("(vec a)")?),
             ],
             parse_str("(vec a)")?,
@@ -74,118 +74,122 @@ pub fn eval_externals(
     t_env: &mut TypeEnv,
     env: Environment,
     name: &str,
+    args: Vec<Expr>,
 ) -> Result<(Expr, Environment)> {
     let res = match name {
-        "dbg" => a_dbg(&env),
-        "to_string" => a_to_string(&env),
-        "id" => a_id(&env),
-        "+" => number_plus(&env),
-        "-" => number_minus(&env),
-        "%" => number_mod(&env),
-        "not" => bool_not(&env),
-        "&" => bool_and(&env),
-        "|" => bool_or(&env),
-        "==" => number_eq(&env),
-        "!=" => number_neq(&env),
-        "[]" => access(&env),
-        "map" => map(t_env, &env),
-        "filter" => filter(t_env, &env),
-        "range" => range(&env),
+        "dbg" => a_dbg(&env, args),
+        "to_string" => a_to_string(&env, args),
+        "id" => a_id(&env, args),
+        "+" => number_plus(&env, args),
+        "-" => number_minus(&env, args),
+        "%" => number_mod(&env, args),
+        "not" => bool_not(&env, args),
+        "&" => bool_and(&env, args),
+        "|" => bool_or(&env, args),
+        "==" => number_eq(&env, args),
+        "!=" => number_neq(&env, args),
+        "[]" => access(&env, args),
+        "map" => map(t_env, &env, args),
+        "filter" => filter(t_env, &env, args),
+        "range" => range(&env, args),
         _ => Err(anyhow::anyhow!("{} is not external", name)),
     }?;
     Ok((res, env))
 }
 
-fn a_dbg(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?;
+fn a_dbg(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = &args[0];
     println!("{}", a);
     Ok(a.clone())
 }
 
-fn a_to_string(env: &Environment) -> Result<Expr> {
-    let v = env.get("v")?;
+fn a_to_string(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let v = &args[0];
     Ok(Expr::Literal(Value::String(format!("{}", v))))
 }
 
-fn a_id(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?;
+fn a_id(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = &args[0];
     Ok(a.clone())
 }
 
-fn number_plus(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.number()?;
-    let b = env.get("b")?.literal()?.number()?;
+fn number_plus(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = &args[0].literal()?.number()?;
+    let b = &args[1].literal()?.number()?;
     Ok(Expr::Literal(Value::Number(a + b)))
 }
 
-fn number_minus(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.number()?;
-    let b = env.get("b")?.literal()?.number()?;
+fn number_minus(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = &args[0].literal()?.number()?;
+    let b = &args[1].literal()?.number()?;
     Ok(Expr::Literal(Value::Number(a - b)))
 }
 
-fn number_mod(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.number()?;
-    let b = env.get("b")?.literal()?.number()?;
+fn number_mod(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = &args[0].literal()?.number()?;
+    let b = &args[1].literal()?.number()?;
     Ok(Expr::Literal(Value::Number(a % b)))
 }
 
-fn number_eq(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.number()?;
-    let b = env.get("b")?.literal()?.number()?;
+fn number_eq(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = &args[0].literal()?.number()?;
+    let b = &args[1].literal()?.number()?;
     Ok(Expr::Literal(Value::Bool(a == b)))
 }
 
-fn number_neq(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.number()?;
-    let b = env.get("b")?.literal()?.number()?;
+fn number_neq(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = args[0].literal()?.number()?;
+    let b = args[1].literal()?.number()?;
     Ok(Expr::Literal(Value::Bool(a != b)))
 }
 
-fn bool_not(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.boolean()?;
+fn bool_not(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = args[0].literal()?.boolean()?;
     Ok(Expr::Literal(Value::Bool(!a)))
 }
 
-fn bool_and(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.boolean()?;
-    let b = env.get("b")?.literal()?.boolean()?;
+fn bool_and(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = args[0].literal()?.boolean()?;
+    let b = args[1].literal()?.boolean()?;
     Ok(Expr::Literal(Value::Bool(a && b)))
 }
 
-fn bool_or(env: &Environment) -> Result<Expr> {
-    let a = env.get("a")?.literal()?.boolean()?;
-    let b = env.get("b")?.literal()?.boolean()?;
+fn bool_or(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let a = args[0].literal()?.boolean()?;
+    let b = args[1].literal()?.boolean()?;
     Ok(Expr::Literal(Value::Bool(a || b)))
 }
 
-fn access(env: &Environment) -> Result<Expr> {
-    let r = env.get("r")?.literal()?;
+fn access(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let r = args[0].literal()?;
     let r = r.record()?;
-    let k = env.get("k")?.literal()?.atom()?;
+    let k = args[1].literal()?.atom()?;
     Ok(r.get(&k).unwrap().clone())
 }
 
-fn map(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
-    let v = env.get("v")?.literal()?;
+fn map(t_env: &mut TypeEnv, env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    log::debug!("map: {:?}", args);
+    let f = &args[0];
+    let v = args[1].literal()?;
     let v = v.list()?;
     let elements = v
         .iter()
         .map(|e| {
-            FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
-                .eval(t_env, env.clone())
-                .map(|t| t.0)
+            let app = FnApp::new(f.clone(), vec![e.clone()]);
+            log::debug!("{}", app);
+            let (e, _) = app.eval(t_env, env.clone())?;
+            Ok(e)
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(Expr::Literal(Value::List(elements)))
 }
 
-fn filter(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
-    let v = env.get("v")?.literal()?;
+fn filter(t_env: &mut TypeEnv, env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let v = args[1].literal()?;
     let v = v.list()?;
     let mut elements = vec![];
     for e in v {
-        let ok = FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
+        let ok = FnApp::new(args[0].clone(), vec![e.clone()])
             .eval(t_env, env.clone())
             .map(|t| t.0)?;
         if ok.literal()?.boolean()? {
@@ -195,9 +199,9 @@ fn filter(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
     Ok(Expr::Literal(Value::List(elements)))
 }
 
-fn range(env: &Environment) -> Result<Expr> {
-    let start = env.get("start")?.literal()?.number()?;
-    let end = env.get("end")?.literal()?.number()?;
+fn range(_env: &Environment, args: Vec<Expr>) -> Result<Expr> {
+    let start = args[0].literal()?.number()?;
+    let end = args[1].literal()?.number()?;
     Ok(Expr::Literal(Value::List(
         (start..end)
             .map(|i| Expr::Literal(Value::Number(i)))

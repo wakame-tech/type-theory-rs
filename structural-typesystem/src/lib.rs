@@ -9,18 +9,18 @@ pub mod types;
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use simple_logger::SimpleLogger;
     use std::sync::Once;
 
     static INIT: Once = Once::new();
 
     pub fn setup() {
         INIT.call_once(|| {
-            SimpleLogger::new()
-                .without_timestamps()
-                .with_level(log::LevelFilter::Debug)
-                .init()
-                .unwrap();
+            tracing_subscriber::fmt()
+                .with_test_writer()
+                .without_time()
+                .with_max_level(tracing::Level::DEBUG)
+                .with_line_number(true)
+                .init();
         });
     }
 }

@@ -5,7 +5,7 @@ use crate::{
     types::{Id, Type},
 };
 use anyhow::Result;
-use ast::ast::{Case, Expr, FnApp, FnDef, Let, Program, TypeDef, Value};
+use ast::ast::{Case, Expr, External, FnApp, FnDef, Let, Program, TypeDef, Value};
 use std::collections::{BTreeMap, HashSet};
 
 pub trait TypeCheck {
@@ -78,12 +78,20 @@ impl TypeCheck for FnDef {
 
 impl TypeCheck for Let {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let value_ty = self.value.type_check(env)?;
+        log::debug!("let {} = {}", self.name, self.value);
+        let use_decl_type = matches!(
+            self.value.as_ref(),
+            Expr::Literal(Value::External(External(_)))
+        );
 
-        let let_ty = if let Some(decl_ty) = &self.typ {
+        let let_ty = if self.typ.is_some() || use_decl_type {
+            let decl_ty = self.typ.as_ref().unwrap();
             let decl_ty = env.new_type(decl_ty)?;
             let decl_ty = type_eval(env, decl_ty)?;
-            ensure_subtype(env, value_ty, decl_ty)?;
+            if !use_decl_type {
+                let value_ty = self.value.type_check(env)?;
+                ensure_subtype(env, value_ty, decl_ty)?;
+            }
             decl_ty
         } else {
             let infer_ty = self.value.infer_type(env, &HashSet::new())?;
@@ -91,6 +99,7 @@ impl TypeCheck for Let {
             infer_ty
         };
         env.set_variable(&self.name, let_ty);
+        log::debug!("{} : {}", self.name, env.type_name(let_ty)?);
         Ok(let_ty)
     }
 }

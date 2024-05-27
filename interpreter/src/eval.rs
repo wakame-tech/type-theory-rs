@@ -58,15 +58,20 @@ impl Eval for FnApp {
             .map(|arg| arg.eval(t_env, env.clone()))
             .collect::<Result<Vec<_>>>()?;
 
-        let Expr::FnDef(def) = f else {
-            return Err(anyhow!("{} is cannot apply", f));
-        };
-
-        let mut env = env;
-        for (param, (arg, _)) in def.args.iter().zip(args.iter()) {
-            env.insert(&param.name, arg.clone());
+        match f {
+            Expr::FnDef(def) => {
+                let mut env = env;
+                for (param, (arg, _)) in def.args.iter().zip(args.iter()) {
+                    env.insert(&param.name, arg.clone());
+                }
+                def.body.eval(t_env, env)
+            }
+            Expr::Literal(Value::External(External(name))) => {
+                let args = args.iter().map(|(arg, _)| arg.clone()).collect::<Vec<_>>();
+                eval_externals(t_env, env, &name, args)
+            }
+            _ => Err(anyhow!("{} is cannot apply", f)),
         }
-        def.body.eval(t_env, env)
     }
 }
 
@@ -88,7 +93,7 @@ impl Eval for Expr {
             Expr::FnDef(fndef) => fndef.eval(t_env, env),
             Expr::Let(r#let) => r#let.eval(t_env, env),
             Expr::FnApp(fnapp) => fnapp.eval(t_env, env),
-            Expr::Literal(Value::External(External(name))) => eval_externals(t_env, env, name),
+            e @ Expr::Literal(Value::External(External(_))) => Ok((e.clone(), env)),
             Expr::Literal(lit) => lit.eval(t_env, env),
             Expr::Variable(var) => Ok((env.get(var)?.clone(), env)),
             Expr::Case(case) => case.eval(t_env, env),
