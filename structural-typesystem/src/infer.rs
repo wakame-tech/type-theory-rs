@@ -353,6 +353,7 @@ mod test {
         let expected = parse_str(type_expr)?;
         let exp = into_ast(&parse_str(expr)?)?;
         let infer_ty_id = exp.infer_type(env, &HashSet::new())?;
+        // log::debug!("{}", env.alloc.)
         let actual = env.type_name(infer_ty_id)?;
         assert_eq!(expected, actual);
         Ok(())

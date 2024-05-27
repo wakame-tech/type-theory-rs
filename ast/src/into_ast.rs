@@ -133,7 +133,7 @@ pub fn into_ast(sexp: &Sexp) -> Result<Expr> {
         },
         Sexp::String(lit) => match lit.as_str() {
             _ if is_number(lit) => Ok(Expr::Literal(Value::Number(lit.parse()?))),
-            _ if lit.starts_with("'") && lit.ends_with("'") => Ok(Expr::Literal(Value::String(
+            _ if lit.starts_with('\'') && lit.ends_with('\'') => Ok(Expr::Literal(Value::String(
                 lit[1..lit.len() - 1].to_string(),
             ))),
             "true" | "false" => Ok(Expr::Literal(Value::Bool(lit.parse()?))),

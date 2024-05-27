@@ -170,7 +170,7 @@ fn map(t_env: &mut TypeEnv, env: &Environment) -> Result<Expr> {
     let v = env.get("v")?.literal()?;
     let v = v.list()?;
     let elements = v
-        .into_iter()
+        .iter()
         .map(|e| {
             FnApp::new(Expr::Variable("f".to_string()), vec![e.clone()])
                 .eval(t_env, env.clone())
