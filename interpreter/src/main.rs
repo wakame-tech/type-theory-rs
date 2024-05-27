@@ -40,7 +40,7 @@ pub fn setup_logger() {
 
 fn eval_prelude(type_env: &mut TypeEnv, env: Environment) -> Result<Environment> {
     let prelude =
-        import(&project_root::get_project_root()?.join(&PathBuf::from("codes/prelude.sexp")))?;
+        import(&project_root::get_project_root()?.join(PathBuf::from("codes/prelude.sexp")))?;
     prelude.type_check(type_env)?;
     let (_, env) = prelude.eval(type_env, env)?;
     Ok(env)
