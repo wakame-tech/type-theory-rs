@@ -38,6 +38,14 @@ impl TypeEnv {
         let (a, b) = (type_eval(self, a)?, type_eval(self, b)?);
         let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
         let res = match (a_ty, b_ty) {
+            // both are union types
+            (Type::Union { types: a_types, .. }, Type::Union { types: b_types, .. }) => {
+                Ok(b_types.iter().any(|bt| {
+                    a_types
+                        .iter()
+                        .any(|at| self.is_subtype(*at, *bt).unwrap_or(false))
+                }))
+            }
             // union types
             (_, Type::Union { types, .. }) => Ok(types
                 .iter()
@@ -78,7 +86,7 @@ impl TypeEnv {
             // ? vs any
             (_, Type::Primitive { id, .. }) if id == any => Ok(true),
             // atom literal types
-            (Type::Primitive { name, .. }, _) if name.starts_with(":") => {
+            (Type::Primitive { name, .. }, _) if name.starts_with(':') => {
                 let atom = self.get(&parse_str("atom")?)?;
                 self.is_subtype(atom, b)
             }
@@ -88,7 +96,7 @@ impl TypeEnv {
                 self.is_subtype(int, b)
             }
             // str literal types
-            (Type::Primitive { name, .. }, _) if name.starts_with("'") && name.ends_with("'") => {
+            (Type::Primitive { name, .. }, _) if name.starts_with('\'') && name.ends_with('\'') => {
                 let str = self.get(&parse_str("str")?)?;
                 self.is_subtype(str, b)
             }
@@ -158,7 +166,9 @@ mod test {
         assert!(is_subtype("any", "(| int any)")?);
         assert!(is_subtype("3", "(| 1 2 3)")?);
         assert!(!is_subtype("3", "(| 0)")?);
-        // assert!(is_subtype("(| 1)", "(| 1 2 3)")?);
+        assert!(is_subtype("(| 1)", "(| 1 2 3)")?);
+        assert!(is_subtype("(| int bool)", "(| int bool any)")?);
+        assert!(is_subtype("(| str)", "(| int bool any)")?);
         Ok(())
     }
 }

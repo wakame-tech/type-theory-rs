@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use symbolic_expressions::Sexp;
 
 pub type Id = usize;
@@ -35,7 +35,7 @@ pub enum Type {
     },
     Union {
         id: Id,
-        types: Vec<Id>,
+        types: BTreeSet<Id>,
     },
 }
 

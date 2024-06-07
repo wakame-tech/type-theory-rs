@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Result;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Debug, Display},
 };
 use symbolic_expressions::{parser::parse_str, Sexp};
@@ -177,7 +177,7 @@ impl TypeEnv {
                 let types = list[1..]
                     .iter()
                     .map(|s| self.new_type(s))
-                    .collect::<Result<Vec<_>>>()?;
+                    .collect::<Result<BTreeSet<_>>>()?;
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::Union { id, types });
                 self.register_type_id(ty, id);
