@@ -77,6 +77,21 @@ impl TypeEnv {
             (Type::Variable { id: a_id, .. }, Type::Variable { id: b_id, .. }) => Ok(a_id == b_id),
             // ? vs any
             (_, Type::Primitive { id, .. }) if id == any => Ok(true),
+            // atom literal types
+            (Type::Primitive { name, .. }, _) if name.starts_with(":") => {
+                let atom = self.get(&parse_str("atom")?)?;
+                self.is_subtype(atom, b)
+            }
+            // int literal types
+            (Type::Primitive { name, .. }, _) if name.parse::<i32>().is_ok() => {
+                let int = self.get(&parse_str("int")?)?;
+                self.is_subtype(int, b)
+            }
+            // str literal types
+            (Type::Primitive { name, .. }, _) if name.starts_with("'") && name.ends_with("'") => {
+                let str = self.get(&parse_str("str")?)?;
+                self.is_subtype(str, b)
+            }
             _ => Ok(false),
         };
         log::debug!(
@@ -97,38 +112,53 @@ mod test {
     use anyhow::Result;
     use symbolic_expressions::parser::parse_str;
 
-    fn should_be_subtype(a: &str, b: &str) -> Result<()> {
+    fn is_subtype(a: &str, b: &str) -> Result<bool> {
         let mut env = TypeEnv::default();
         let a = env.new_type(&parse_str(a)?)?;
         let b = env.new_type(&parse_str(b)?)?;
-        assert!(env.is_subtype(a, b)?);
-        Ok(())
+        env.is_subtype(a, b)
     }
 
     #[test]
     fn test_is_subtype_any() -> Result<()> {
-        should_be_subtype("int", "any")?;
-        should_be_subtype("((int) -> int)", "any")?;
+        assert!(is_subtype("int", "any")?);
+        assert!(is_subtype("((int) -> int)", "any")?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_subtype_literal() -> Result<()> {
+        assert!(is_subtype(":ok", "atom")?);
+        assert!(is_subtype(":ok", "any")?);
+        assert!(is_subtype(":ok", "(| :ok :err)")?);
+        assert!(!is_subtype(":hoge", "(| :ok :err)")?);
+        assert!(is_subtype("3", "int")?);
+        assert!(is_subtype("3", "any")?);
         Ok(())
     }
 
     #[test]
     fn test_is_subtype_fn() -> Result<()> {
-        should_be_subtype("((any) -> int)", "((int) -> any)")
+        assert!(is_subtype("((any) -> int)", "((int) -> any)")?);
+        Ok(())
     }
 
     #[test]
     fn test_is_subtype_record() -> Result<()> {
-        should_be_subtype(
+        assert!(is_subtype(
             "(record (a : int) (b : int))",
             "(record (a : any) (b : int))",
-        )
+        )?);
+        Ok(())
     }
 
     #[test]
     fn test_is_subtype_union() -> Result<()> {
-        should_be_subtype("int", "(| int any)")?;
-        should_be_subtype("any", "(| int any)")?;
+        assert!(is_subtype("int", "(| int any)")?);
+        assert!(is_subtype("any", "(| int any)")?);
+        assert!(is_subtype("3", "(| 1 2 3)")?);
+        assert!(!is_subtype("3", "(| 0)")?);
+        // assert!(is_subtype("(| 1)", "(| 1 2 3)")?);
         Ok(())
     }
 }

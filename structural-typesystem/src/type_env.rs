@@ -104,7 +104,7 @@ impl TypeEnv {
         }
 
         match ty {
-            Sexp::String(v) if v.len() == 1 => {
+            Sexp::String(v) if v.len() == 1 && v.chars().next().unwrap().is_alphabetic() => {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::variable(id));
                 self.register_type_id(ty, id);
