@@ -42,6 +42,10 @@ impl TypeEnv {
             (Type::Primitive { id: a_id, .. }, Type::Primitive { id: b_id, .. }) => {
                 Ok(self.has_edge(a_id, b_id))
             }
+            // union types
+            (_, Type::Union { types, .. }) => Ok(types
+                .iter()
+                .any(|t| self.is_subtype(a, *t).unwrap_or(false))),
             // fn types
             (
                 Type::Function {
@@ -129,6 +133,15 @@ mod test {
         let rec_a = env.new_type(&parse_str("(record (a : int) (b : int))")?)?;
         let rec_b = env.new_type(&parse_str("(record (a : any) (b : int))")?)?;
         assert!(env.is_subtype(rec_a, rec_b)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_type_cmp_union() -> Result<()> {
+        let mut env = TypeEnv::default();
+        let int = env.new_type(&parse_str("int")?)?;
+        let int_or_any = env.new_type(&parse_str("(| int any)")?)?;
+        assert!(env.is_subtype(int, int_or_any)?);
         Ok(())
     }
 }

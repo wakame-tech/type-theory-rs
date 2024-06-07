@@ -8,6 +8,7 @@ pub const RECORD_TYPE_KEYWORD: &str = "record";
 pub const LIST_TYPE_KEYWORD: &str = "vec";
 pub const GETTER_TYPE_KEYWORD: &str = "[]";
 pub const FN_TYPE_KEYWORD: &str = "->";
+pub const UNION_TYPE_KEYWORD: &str = "|";
 
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum Type {
@@ -32,6 +33,10 @@ pub enum Type {
         id: Id,
         elements: Vec<Id>,
     },
+    Union {
+        id: Id,
+        types: Vec<Id>,
+    },
 }
 
 impl Type {
@@ -42,6 +47,7 @@ impl Type {
             Type::Function { id, .. } => *id,
             Type::Record { id, .. } => *id,
             Type::Container { id, .. } => *id,
+            Type::Union { id, .. } => *id,
         }
     }
 

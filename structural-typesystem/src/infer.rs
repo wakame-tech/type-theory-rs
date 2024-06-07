@@ -191,6 +191,12 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
             }
             id
         }
+        Type::Union { id, types } => {
+            for id in types {
+                fresh_rec(env, id, mappings, non_generic);
+            }
+            id
+        }
     }
 }
 

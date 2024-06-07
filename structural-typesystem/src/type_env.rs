@@ -2,7 +2,7 @@ use crate::{
     type_alloc::TypeAlloc,
     types::{
         Id, Type, TypeExpr, FN_TYPE_KEYWORD, GETTER_TYPE_KEYWORD, LIST_TYPE_KEYWORD,
-        RECORD_TYPE_KEYWORD,
+        RECORD_TYPE_KEYWORD, UNION_TYPE_KEYWORD,
     },
 };
 use anyhow::Result;
@@ -199,6 +199,16 @@ impl TypeEnv {
                 let b = self.new_type(&list[2])?;
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::container(con, vec![a, b]));
+                self.register_type_id(ty, id);
+                Ok(id)
+            }
+            Sexp::List(list) if list[0].string()? == UNION_TYPE_KEYWORD => {
+                let types = list[1..]
+                    .iter()
+                    .map(|s| self.new_type(s))
+                    .collect::<Result<Vec<_>>>()?;
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::Union { id, types });
                 self.register_type_id(ty, id);
                 Ok(id)
             }
