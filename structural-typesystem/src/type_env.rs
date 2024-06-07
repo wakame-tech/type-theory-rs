@@ -6,7 +6,6 @@ use crate::{
     },
 };
 use anyhow::Result;
-use petgraph::prelude::*;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Debug, Display},
@@ -20,9 +19,6 @@ pub struct TypeEnv {
     variables: HashMap<String, Id>,
     /// key is stringified sexp
     id_map: HashMap<String, Id>,
-    /// subtyping tree
-    index_map: HashMap<Id, NodeIndex>,
-    tree: Graph<Id, ()>,
 }
 
 pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
@@ -60,22 +56,12 @@ pub fn container(name: String, elements: Vec<TypeExpr>) -> TypeExpr {
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
-        let any = env.new_type_str("any").unwrap();
-        let int = env.new_type_str("int").unwrap();
-        env.new_subtype(int, any);
-
-        let bool = env.new_type_str("bool").unwrap();
-        env.new_subtype(bool, any);
-
-        let atom = env.new_type_str("atom").unwrap();
-        env.new_subtype(atom, any);
-
-        let str = env.new_type_str("str").unwrap();
-        env.new_subtype(str, any);
-
-        let vec = env.new_type_str("vec").unwrap();
-        env.new_subtype(vec, any);
-
+        env.new_type_str("any").unwrap();
+        env.new_type_str("int").unwrap();
+        env.new_type_str("bool").unwrap();
+        env.new_type_str("atom").unwrap();
+        env.new_type_str("str").unwrap();
+        env.new_type_str("vec").unwrap();
         env
     }
 }
@@ -86,8 +72,6 @@ impl TypeEnv {
             alloc: TypeAlloc::new(),
             variables: HashMap::new(),
             id_map: HashMap::new(),
-            index_map: HashMap::new(),
-            tree: Graph::new(),
         }
     }
 
@@ -108,12 +92,6 @@ impl TypeEnv {
 
     pub fn type_name(&self, id: Id) -> Result<Sexp> {
         self.alloc.as_sexp(id)
-    }
-
-    /// register `a` as subtype of `b`
-    pub fn new_subtype(&mut self, a: Id, b: Id) {
-        let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
-        self.tree.add_edge(bi, ai, ());
     }
 
     pub fn new_alias(&mut self, name: &str, ty: Id) {
@@ -137,13 +115,6 @@ impl TypeEnv {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::primitive(id, s));
                 self.register_type_id(ty, id);
-
-                // all atoms are subtypes of atom
-                if s.starts_with(':') {
-                    let atom_ty = self.new_type_str("atom")?;
-                    self.new_subtype(id, atom_ty);
-                }
-
                 Ok(id)
             }
             Sexp::List(list)
@@ -236,14 +207,6 @@ impl TypeEnv {
 
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {
         self.id_map.insert(expr.to_string(), type_id);
-        let i = self.tree.add_node(type_id);
-        self.index_map.insert(type_id, i);
-    }
-
-    /// returns true is a is subtype of b
-    pub fn has_edge(&self, a: Id, b: Id) -> bool {
-        let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
-        a == b || self.tree.find_edge(bi, ai).is_some()
     }
 }
 

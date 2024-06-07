@@ -667,7 +667,6 @@ dependencies = [
  "anyhow",
  "ast",
  "log",
- "petgraph",
  "ptree",
  "simple_logger",
  "symbolic_expressions",

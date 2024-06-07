@@ -30,14 +30,14 @@ impl TypeEnv {
 
     /// subtyping order for [TypeExpr]
     pub fn is_subtype(&mut self, a: Id, b: Id) -> Result<bool> {
+        if a == b {
+            return Ok(true);
+        }
+
         let any = self.get(&parse_str("any")?)?;
         let (a, b) = (type_eval(self, a)?, type_eval(self, b)?);
         let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
         let res = match (a_ty, b_ty) {
-            // primitive types
-            (Type::Primitive { id: a_id, .. }, Type::Primitive { id: b_id, .. }) => {
-                Ok(self.has_edge(a_id, b_id))
-            }
             // union types
             (_, Type::Union { types, .. }) => Ok(types
                 .iter()
@@ -75,8 +75,6 @@ impl TypeEnv {
                 },
             ) => self.is_subtype_vec(a_elements, b_elements),
             (Type::Variable { id: a_id, .. }, Type::Variable { id: b_id, .. }) => Ok(a_id == b_id),
-            // any vs ?
-            (Type::Primitive { id, .. }, _) if id == any => Ok(false),
             // ? vs any
             (_, Type::Primitive { id, .. }) if id == any => Ok(true),
             _ => Ok(false),
