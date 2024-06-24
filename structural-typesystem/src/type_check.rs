@@ -63,7 +63,7 @@ impl TypeCheck for FnDef {
                     env.new_type(arg_ty)?
                 } else {
                     let id = env.alloc.issue_id();
-                    env.alloc.insert(Type::variable(id));
+                    env.alloc.insert(Type::variable(id, None));
                     id
                 };
                 env.set_variable(&arg.name, arg_ty);
@@ -114,6 +114,13 @@ impl TypeCheck for FnApp {
         for (value, arg) in self.1.iter().zip(args.iter()) {
             let param_ty = value.type_check(env)?;
             // if `arg_ty` is generic, skip subtype check
+            if let Type::Variable {
+                upper_bound: Some(bound),
+                ..
+            } = env.alloc.get(*arg)?
+            {
+                ensure_subtype(env, *arg, bound)?;
+            }
             if !env.alloc.is_generic(*arg)? {
                 ensure_subtype(env, param_ty, *arg)?;
             }

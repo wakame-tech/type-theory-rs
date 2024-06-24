@@ -9,6 +9,7 @@ pub const LIST_TYPE_KEYWORD: &str = "vec";
 pub const GETTER_TYPE_KEYWORD: &str = "[]";
 pub const FN_TYPE_KEYWORD: &str = "->";
 pub const UNION_TYPE_KEYWORD: &str = "|";
+pub const SUBTYPE_KEYWORD: &str = "<:";
 
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum Type {
@@ -19,6 +20,7 @@ pub enum Type {
     Variable {
         id: Id,
         instance: Option<Id>,
+        upper_bound: Option<Id>,
     },
     Function {
         id: Id,
@@ -58,8 +60,12 @@ impl Type {
         }
     }
 
-    pub fn variable(id: Id) -> Self {
-        Type::Variable { id, instance: None }
+    pub fn variable(id: Id, upper_bound: Option<Id>) -> Self {
+        Type::Variable {
+            id,
+            instance: None,
+            upper_bound,
+        }
     }
 
     pub fn set_instance(&mut self, id: Id) {

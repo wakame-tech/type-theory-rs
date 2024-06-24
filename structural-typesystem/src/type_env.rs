@@ -2,7 +2,7 @@ use crate::{
     type_alloc::TypeAlloc,
     types::{
         Id, Type, TypeExpr, FN_TYPE_KEYWORD, GETTER_TYPE_KEYWORD, LIST_TYPE_KEYWORD,
-        RECORD_TYPE_KEYWORD, UNION_TYPE_KEYWORD,
+        RECORD_TYPE_KEYWORD, SUBTYPE_KEYWORD, UNION_TYPE_KEYWORD,
     },
 };
 use anyhow::Result;
@@ -106,7 +106,7 @@ impl TypeEnv {
         match ty {
             Sexp::String(v) if v.len() == 1 && v.chars().next().unwrap().is_alphabetic() => {
                 let id = self.alloc.issue_id();
-                self.alloc.insert(Type::variable(id));
+                self.alloc.insert(Type::variable(id, None));
                 self.register_type_id(ty, id);
                 log::debug!("new_type variable: {} #{}", ty, id);
                 Ok(id)
@@ -181,6 +181,23 @@ impl TypeEnv {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::Union { id, types });
                 self.register_type_id(ty, id);
+                Ok(id)
+            }
+            Sexp::List(list)
+                if list.len() == 3
+                    && list[1].is_string()
+                    && list[1].string()? == SUBTYPE_KEYWORD =>
+            {
+                let is_type_var = list[0].is_string()
+                    && list[0].string()?.chars().next().unwrap().is_alphabetic();
+                if !is_type_var {
+                    return Err(anyhow::anyhow!("must be type variable: {:?}", list[0]));
+                }
+                let id = self.alloc.issue_id();
+                self.register_type_id(ty, id);
+                let upper_bound = self.get(&list[2])?;
+                log::debug!("new_type variable: {} <: {} #{}", ty, &list[2], id);
+                self.alloc.insert(Type::variable(id, Some(upper_bound)));
                 Ok(id)
             }
             _ => Err(anyhow::anyhow!(

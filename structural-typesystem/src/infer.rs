@@ -56,7 +56,7 @@ impl InferType for FnApp {
             .map(|v| v.infer_type(env, non_generic))
             .collect::<Result<Vec<_>>>()?;
         let ret_ty_id = env.alloc.issue_id();
-        env.alloc.insert(Type::variable(ret_ty_id));
+        env.alloc.insert(Type::variable(ret_ty_id, None));
         let new_fn_ty = env.alloc.issue_id();
         env.alloc
             .insert(Type::function(new_fn_ty, arg_ty_ids.clone(), ret_ty_id));
@@ -88,7 +88,7 @@ impl InferType for FnDef {
                     env.new_type(typ)?
                 } else {
                     let id = env.alloc.issue_id();
-                    env.alloc.insert(Type::variable(id));
+                    env.alloc.insert(Type::variable(id, None));
                     id
                 };
                 env.set_variable(&arg.name, arg_ty);
@@ -164,7 +164,7 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
                     *id
                 } else {
                     let id = env.alloc.issue_id();
-                    env.alloc.insert(Type::variable(id));
+                    env.alloc.insert(Type::variable(id, None));
                     id
                 }
             } else {
