@@ -6,7 +6,6 @@ use crate::{
 use anyhow::Result;
 use ast::ast::{Case, Expr, FnApp, FnDef, Let, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use symbolic_expressions::parser::parse_str;
 
 pub trait InferType {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id>;
@@ -16,10 +15,10 @@ impl InferType for Value {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         match self {
             Value::External(_) => Err(anyhow::anyhow!("external value")),
-            Value::Bool(_) => env.get(&parse_str("bool")?),
-            Value::Number(_) => env.get(&parse_str("int")?),
-            Value::Atom(atom) => env.new_type_str(format!(":{}", atom).as_str()),
-            Value::String(_) => env.get(&parse_str("str")?),
+            Value::Bool(v) => env.new_type_str(if *v { "true" } else { "false" }),
+            Value::Number(v) => env.new_type_str(v.to_string().as_str()),
+            Value::Atom(v) => env.new_type_str(format!(":{}", v).as_str()),
+            Value::String(v) => env.new_type_str(v.as_str()),
             Value::Record(fields) => {
                 let fields = fields
                     .iter()
@@ -371,16 +370,16 @@ mod test {
     #[test]
     fn test_literal() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "true", "bool")?;
-        should_infer(&mut env, "1", "int")?;
-        should_infer(&mut env, "(record (a : 1))", "(record (a : int))")?;
+        should_infer(&mut env, "true", "true")?;
+        should_infer(&mut env, "1", "1")?;
+        should_infer(&mut env, "(record (a : 1))", "(record (a : 1))")?;
         Ok(())
     }
 
     #[test]
     fn test_fn() -> Result<()> {
         let mut env = TypeEnv::default();
-        should_infer(&mut env, "(fn (x : int) 1)", "((int) -> int)")
+        should_infer(&mut env, "(fn (x : int) 1)", "((int) -> 1)")
     }
 
     #[test]
@@ -396,7 +395,7 @@ mod test {
         let mut env = TypeEnv::default();
         let ty = env.new_type_str("((a) -> a)")?;
         env.set_variable("id", ty);
-        should_infer(&mut env, "(let a (id 1))", "int")
+        should_infer(&mut env, "(let a (id 1))", "1")
     }
 
     #[test]

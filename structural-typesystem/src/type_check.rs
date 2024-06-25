@@ -221,7 +221,7 @@ mod tests {
             (
                 "(let x : (record (a : bool) (b : int)) (record (b : 1) (a : 2)))",
                 Some(
-                    "(record (a : int) (b : int)) is not subtype of (record (a : bool) (b : int))"
+                    "(record (a : 2) (b : 1)) is not subtype of (record (a : bool) (b : int))"
                         .to_string(),
                 ),
             ),
