@@ -70,6 +70,15 @@ impl TypeAlloc {
                     .collect::<Result<Vec<_>>>()?
                     .join(" ")
             )),
+            Type::Union { id, types } => Ok(format!(
+                "(|_#{} {})",
+                id,
+                types
+                    .iter()
+                    .map(|id| self.debug(*id))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(" ")
+            )),
         }
     }
 
@@ -127,6 +136,18 @@ impl TypeAlloc {
                         .collect::<Vec<_>>(),
                 ))
             }
+            Type::Union { types, .. } => {
+                let types = types
+                    .iter()
+                    .map(|id| self.as_sexp(*id))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(Sexp::List(
+                    vec![Sexp::String("|".to_string())]
+                        .into_iter()
+                        .chain(types)
+                        .collect::<Vec<_>>(),
+                ))
+            }
         }
     }
 
@@ -152,6 +173,7 @@ impl TypeAlloc {
             Type::Container { elements, .. } => {
                 Ok(elements.iter().any(|id| self.is_generic(*id).unwrap()))
             }
+            Type::Union { types, .. } => Ok(types.iter().any(|id| self.is_generic(*id).unwrap())),
             Type::Primitive { .. } => Ok(false),
             Type::Variable { .. } => Ok(true),
         }
@@ -177,11 +199,20 @@ mod tests {
     fn parse_record_type() -> Result<()> {
         setup();
         let mut type_env = TypeEnv::default();
-        let rec = type_env.new_type(&parse_str("(record (a : int))")?)?;
+        let record = type_env.new_type(&parse_str("(record (a : int))")?)?;
         assert_eq!(
-            type_env.alloc.as_sexp(rec)?,
-            parse_str("(record (a : int))")?,
+            type_env.alloc.as_sexp(record)?,
+            parse_str("(record (a : int))")?
         );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_union_type() -> Result<()> {
+        setup();
+        let mut type_env = TypeEnv::default();
+        let union = type_env.new_type(&parse_str("(| int atom)")?)?;
+        assert_eq!(type_env.alloc.as_sexp(union)?, parse_str("(| int atom)")?);
         Ok(())
     }
 }

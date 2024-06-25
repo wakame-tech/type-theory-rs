@@ -2,13 +2,12 @@ use crate::{
     type_alloc::TypeAlloc,
     types::{
         Id, Type, TypeExpr, FN_TYPE_KEYWORD, GETTER_TYPE_KEYWORD, LIST_TYPE_KEYWORD,
-        RECORD_TYPE_KEYWORD,
+        RECORD_TYPE_KEYWORD, SUBTYPE_KEYWORD, UNION_TYPE_KEYWORD,
     },
 };
 use anyhow::Result;
-use petgraph::prelude::*;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{Debug, Display},
 };
 use symbolic_expressions::{parser::parse_str, Sexp};
@@ -20,9 +19,6 @@ pub struct TypeEnv {
     variables: HashMap<String, Id>,
     /// key is stringified sexp
     id_map: HashMap<String, Id>,
-    /// subtyping tree
-    index_map: HashMap<Id, NodeIndex>,
-    tree: Graph<Id, ()>,
 }
 
 pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
@@ -60,22 +56,12 @@ pub fn container(name: String, elements: Vec<TypeExpr>) -> TypeExpr {
 impl Default for TypeEnv {
     fn default() -> Self {
         let mut env = TypeEnv::new();
-        let any = env.new_type_str("any").unwrap();
-        let int = env.new_type_str("int").unwrap();
-        env.new_subtype(int, any);
-
-        let bool = env.new_type_str("bool").unwrap();
-        env.new_subtype(bool, any);
-
-        let atom = env.new_type_str("atom").unwrap();
-        env.new_subtype(atom, any);
-
-        let str = env.new_type_str("str").unwrap();
-        env.new_subtype(str, any);
-
-        let vec = env.new_type_str("vec").unwrap();
-        env.new_subtype(vec, any);
-
+        env.new_type_str("any").unwrap();
+        env.new_type_str("int").unwrap();
+        env.new_type_str("bool").unwrap();
+        env.new_type_str("atom").unwrap();
+        env.new_type_str("str").unwrap();
+        env.new_type_str("vec").unwrap();
         env
     }
 }
@@ -86,8 +72,6 @@ impl TypeEnv {
             alloc: TypeAlloc::new(),
             variables: HashMap::new(),
             id_map: HashMap::new(),
-            index_map: HashMap::new(),
-            tree: Graph::new(),
         }
     }
 
@@ -110,12 +94,6 @@ impl TypeEnv {
         self.alloc.as_sexp(id)
     }
 
-    /// register `a` as subtype of `b`
-    pub fn new_subtype(&mut self, a: Id, b: Id) {
-        let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
-        self.tree.add_edge(bi, ai, ());
-    }
-
     pub fn new_alias(&mut self, name: &str, ty: Id) {
         self.id_map.insert(name.to_string(), ty);
     }
@@ -126,9 +104,9 @@ impl TypeEnv {
         }
 
         match ty {
-            Sexp::String(v) if v.len() == 1 => {
+            Sexp::String(v) if v.len() == 1 && v.chars().next().unwrap().is_alphabetic() => {
                 let id = self.alloc.issue_id();
-                self.alloc.insert(Type::variable(id));
+                self.alloc.insert(Type::variable(id, None));
                 self.register_type_id(ty, id);
                 log::debug!("new_type variable: {} #{}", ty, id);
                 Ok(id)
@@ -137,13 +115,6 @@ impl TypeEnv {
                 let id = self.alloc.issue_id();
                 self.alloc.insert(Type::primitive(id, s));
                 self.register_type_id(ty, id);
-
-                // all atoms are subtypes of atom
-                if s.starts_with(':') {
-                    let atom_ty = self.new_type_str("atom")?;
-                    self.new_subtype(id, atom_ty);
-                }
-
                 Ok(id)
             }
             Sexp::List(list)
@@ -202,6 +173,33 @@ impl TypeEnv {
                 self.register_type_id(ty, id);
                 Ok(id)
             }
+            Sexp::List(list) if list[0].string()? == UNION_TYPE_KEYWORD => {
+                let types = list[1..]
+                    .iter()
+                    .map(|s| self.new_type(s))
+                    .collect::<Result<BTreeSet<_>>>()?;
+                let id = self.alloc.issue_id();
+                self.alloc.insert(Type::Union { id, types });
+                self.register_type_id(ty, id);
+                Ok(id)
+            }
+            Sexp::List(list)
+                if list.len() == 3
+                    && list[1].is_string()
+                    && list[1].string()? == SUBTYPE_KEYWORD =>
+            {
+                let is_type_var = list[0].is_string()
+                    && list[0].string()?.chars().next().unwrap().is_alphabetic();
+                if !is_type_var {
+                    return Err(anyhow::anyhow!("must be type variable: {:?}", list[0]));
+                }
+                let id = self.alloc.issue_id();
+                self.register_type_id(ty, id);
+                let upper_bound = self.get(&list[2])?;
+                log::debug!("new_type variable: {} <: {} #{}", ty, &list[2], id);
+                self.alloc.insert(Type::variable(id, Some(upper_bound)));
+                Ok(id)
+            }
             _ => Err(anyhow::anyhow!(
                 "TypeEnv::new_type() unsupported type: {}",
                 ty
@@ -226,14 +224,6 @@ impl TypeEnv {
 
     fn register_type_id(&mut self, expr: &TypeExpr, type_id: Id) {
         self.id_map.insert(expr.to_string(), type_id);
-        let i = self.tree.add_node(type_id);
-        self.index_map.insert(type_id, i);
-    }
-
-    /// returns true is a is subtype of b
-    pub fn has_edge(&self, a: Id, b: Id) -> bool {
-        let (ai, bi) = (self.index_map[&a], self.index_map[&b]);
-        a == b || self.tree.find_edge(bi, ai).is_some()
     }
 }
 
