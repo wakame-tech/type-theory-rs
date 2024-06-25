@@ -40,11 +40,13 @@ impl TypeEnv {
         let res = match (a_ty, b_ty) {
             // both are union types
             (Type::Union { types: a_types, .. }, Type::Union { types: b_types, .. }) => {
-                Ok(b_types.iter().any(|bt| {
+                let is_subset = a_types.is_subset(&b_types);
+                let has_any_subtype = b_types.iter().any(|bt| {
                     a_types
                         .iter()
-                        .any(|at| self.is_subtype(*at, *bt).unwrap_or(false))
-                }))
+                        .all(|at| self.is_subtype(*at, *bt).unwrap_or(false))
+                });
+                Ok(is_subset || has_any_subtype)
             }
             // union types
             (_, Type::Union { types, .. }) => Ok(types
@@ -100,6 +102,11 @@ impl TypeEnv {
                 let str = self.get(&parse_str("str")?)?;
                 self.is_subtype(str, b)
             }
+            // bool literal types
+            (Type::Primitive { name, .. }, _) if name == "true" || name == "false" => {
+                let bool = self.get(&parse_str("bool")?)?;
+                self.is_subtype(bool, b)
+            }
             _ => Ok(false),
         };
         log::debug!(
@@ -124,6 +131,8 @@ mod test {
         let mut env = TypeEnv::default();
         let a = env.new_type(&parse_str(a)?)?;
         let b = env.new_type(&parse_str(b)?)?;
+        log::debug!("{}", env.type_name(a)?);
+        log::debug!("{}", env.type_name(b)?);
         env.is_subtype(a, b)
     }
 
@@ -166,7 +175,11 @@ mod test {
         assert!(is_subtype("any", "(| int any)")?);
         assert!(is_subtype("3", "(| 1 2 3)")?);
         assert!(!is_subtype("3", "(| 0)")?);
+        assert!(is_subtype("(| 1 3)", "(| 1 2 3)")?);
+        assert!(!is_subtype("(| 1 3)", "(| 1 2)")?);
         assert!(is_subtype("(| 1)", "(| 1 2 3)")?);
+        assert!(is_subtype("(| 1 3)", "(| (| 1 2) 3)")?);
+        assert!(is_subtype("(| 1 2 3)", "(| (| 1 2) (| 3))")?);
         assert!(is_subtype("(| int bool)", "(| int bool any)")?);
         assert!(is_subtype("(| str)", "(| int bool any)")?);
         Ok(())
