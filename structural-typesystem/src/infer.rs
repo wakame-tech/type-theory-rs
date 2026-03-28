@@ -288,13 +288,21 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
             env.alloc.insert(Type::container(*id, elements));
             Ok(*id)
         }
-        _ => Err(anyhow::anyhow!(
-            "unify: type mismatch: {} #{} != {} #{}",
-            env.type_name(a)?,
-            a,
-            env.type_name(b)?,
-            b,
-        )),
+        _ => {
+            if env.is_subtype(a, b)? {
+                Ok(b)
+            } else if env.is_subtype(b, a)? {
+                Ok(a)
+            } else {
+                Err(anyhow::anyhow!(
+                    "unify: type mismatch: {} #{} != {} #{}",
+                    env.type_name(a)?,
+                    a,
+                    env.type_name(b)?,
+                    b,
+                ))
+            }
+        }
     }
 }
 
