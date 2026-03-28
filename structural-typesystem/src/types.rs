@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use symbolic_expressions::Sexp;
 
 pub type Id = usize;
@@ -8,6 +8,8 @@ pub const RECORD_TYPE_KEYWORD: &str = "record";
 pub const LIST_TYPE_KEYWORD: &str = "vec";
 pub const GETTER_TYPE_KEYWORD: &str = "[]";
 pub const FN_TYPE_KEYWORD: &str = "->";
+pub const UNION_TYPE_KEYWORD: &str = "|";
+pub const SUBTYPE_KEYWORD: &str = "<:";
 
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum Type {
@@ -18,6 +20,7 @@ pub enum Type {
     Variable {
         id: Id,
         instance: Option<Id>,
+        upper_bound: Option<Id>,
     },
     Function {
         id: Id,
@@ -32,6 +35,10 @@ pub enum Type {
         id: Id,
         elements: Vec<Id>,
     },
+    Union {
+        id: Id,
+        types: BTreeSet<Id>,
+    },
 }
 
 impl Type {
@@ -42,6 +49,7 @@ impl Type {
             Type::Function { id, .. } => *id,
             Type::Record { id, .. } => *id,
             Type::Container { id, .. } => *id,
+            Type::Union { id, .. } => *id,
         }
     }
 
@@ -52,8 +60,12 @@ impl Type {
         }
     }
 
-    pub fn variable(id: Id) -> Self {
-        Type::Variable { id, instance: None }
+    pub fn variable(id: Id, upper_bound: Option<Id>) -> Self {
+        Type::Variable {
+            id,
+            instance: None,
+            upper_bound,
+        }
     }
 
     pub fn set_instance(&mut self, id: Id) {
