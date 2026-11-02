@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use ast::ast::{Case, Expr, FnApp, FnDef, Let, Value};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 pub trait InferType {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id>;
@@ -157,13 +157,14 @@ impl InferType for Expr {
 fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_generic: &[Id]) -> Id {
     let p = prune(&mut env.alloc, tp);
     match env.alloc.get(p).unwrap() {
-        Type::Variable { .. } => {
+        Type::Variable { upper_bound, .. } => {
             if is_generic(&mut env.alloc, p, non_generic) {
                 if let Some(id) = mappings.get(&p) {
                     *id
                 } else {
                     let id = env.alloc.issue_id();
-                    env.alloc.insert(Type::variable(id, None));
+                    env.alloc.insert(Type::variable(id, upper_bound));
+                    mappings.insert(p, id);
                     id
                 }
             } else {
@@ -171,29 +172,58 @@ fn fresh_rec(env: &mut TypeEnv, tp: Id, mappings: &mut HashMap<Id, Id>, non_gene
             }
         }
         Type::Primitive { id, .. } => id,
-        Type::Function { id, args, ret } => {
-            for arg in args {
-                fresh_rec(env, arg, mappings, non_generic);
+        // rebuild composite types only when some child is instantiated,
+        // so that ids of monomorphic types are preserved
+        Type::Function { args, ret, .. } => {
+            let new_args = args
+                .iter()
+                .map(|arg| fresh_rec(env, *arg, mappings, non_generic))
+                .collect::<Vec<_>>();
+            let new_ret = fresh_rec(env, ret, mappings, non_generic);
+            if new_args == args && new_ret == ret {
+                return p;
             }
-            fresh_rec(env, ret, mappings, non_generic);
+            let id = env.alloc.issue_id();
+            env.alloc.insert(Type::function(id, new_args, new_ret));
             id
         }
-        Type::Record { id, fields } => {
-            for (_, id) in fields {
-                fresh_rec(env, id, mappings, non_generic);
+        Type::Record { fields, .. } => {
+            let new_fields = fields
+                .iter()
+                .map(|(label, id)| (label.clone(), fresh_rec(env, *id, mappings, non_generic)))
+                .collect::<BTreeMap<_, _>>();
+            if new_fields == fields {
+                return p;
             }
+            let id = env.alloc.issue_id();
+            env.alloc.insert(Type::record(id, new_fields));
             id
         }
         Type::Container { id, elements } => {
-            for id in elements {
-                fresh_rec(env, id, mappings, non_generic);
+            let new_elements = elements
+                .iter()
+                .map(|id| fresh_rec(env, *id, mappings, non_generic))
+                .collect::<Vec<_>>();
+            if new_elements == elements {
+                return p;
             }
-            id
+            let new_id = env.alloc.issue_id();
+            env.alloc.insert(Type::container(id, new_elements));
+            new_id
         }
-        Type::Union { id, types } => {
-            for id in types {
-                fresh_rec(env, id, mappings, non_generic);
+        Type::Union { types, .. } => {
+            let new_types = types
+                .iter()
+                .map(|id| fresh_rec(env, *id, mappings, non_generic))
+                .collect::<BTreeSet<_>>();
+            if new_types == types {
+                return p;
             }
+            let id = env.alloc.issue_id();
+            env.alloc.insert(Type::Union {
+                id,
+                types: new_types,
+            });
             id
         }
     }
@@ -404,6 +434,24 @@ mod test {
         let ty = env.new_type_str("((a) -> a)")?;
         env.set_variable("id", ty);
         should_infer(&mut env, "(let a (id 1))", "1")
+    }
+
+    #[test]
+    fn test_let_polymorphism() -> Result<()> {
+        let mut env = TypeEnv::default();
+        let ty = env.new_type_str("((a) -> a)")?;
+        env.set_variable("id", ty);
+        should_infer(&mut env, "(id 1)", "1")?;
+        should_infer(&mut env, "(id true)", "true")?;
+        should_infer(&mut env, "id", "((a) -> a)")
+    }
+
+    #[test]
+    fn test_fresh_shares_type_variable() -> Result<()> {
+        let mut env = TypeEnv::default();
+        let ty = env.new_type_str("((a a) -> a)")?;
+        env.set_variable("f", ty);
+        should_infer(&mut env, "(f 1 1)", "1")
     }
 
     #[test]
