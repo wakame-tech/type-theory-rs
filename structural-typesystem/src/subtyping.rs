@@ -97,6 +97,9 @@ impl TypeEnv {
 
         let any = self.get(&parse_str("any")?)?;
         let (a, b) = (type_eval(self, a)?, type_eval(self, b)?);
+        if a == b {
+            return Ok(true);
+        }
         let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
         let res = match (a_ty, b_ty) {
             // left union types: every member must be a subtype
@@ -271,6 +274,14 @@ mod test {
             "(record (a : bool) (b : int))",
             "(record (a : int))"
         )?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_subtype_refl_after_eval() -> Result<()> {
+        assert!(is_subtype("([] (record (x : int)) :x)", "int")?);
+        assert!(is_subtype("int", "([] (record (x : int)) :x)")?);
+        assert!(is_subtype("(| int)", "int")?);
         Ok(())
     }
 
