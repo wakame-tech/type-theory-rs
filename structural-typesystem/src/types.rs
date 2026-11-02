@@ -42,17 +42,6 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn id(&self) -> Id {
-        match self {
-            Type::Primitive { id, .. } => *id,
-            Type::Variable { id, .. } => *id,
-            Type::Function { id, .. } => *id,
-            Type::Record { id, .. } => *id,
-            Type::Container { id, .. } => *id,
-            Type::Union { id, .. } => *id,
-        }
-    }
-
     pub fn primitive(id: Id, name: &str) -> Self {
         Type::Primitive {
             id,

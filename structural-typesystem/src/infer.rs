@@ -33,15 +33,11 @@ impl InferType for Value {
             Value::List(elems) => {
                 // element type is the join of all element types.
                 // if empty, element type infers to a fresh type variable.
-                let mut elem: Option<Id> = None;
-                for e in elems {
-                    let ty = e.infer_type(env, non_generic)?;
-                    elem = Some(match elem {
-                        Some(acc) => env.join(acc, ty)?,
-                        None => ty,
-                    });
-                }
-                let elem = match elem {
+                let elem_tys = elems
+                    .iter()
+                    .map(|e| e.infer_type(env, non_generic))
+                    .collect::<Result<Vec<_>>>()?;
+                let elem = match env.join_all(elem_tys)? {
                     Some(elem) => elem,
                     None => env.new_type_str("a")?,
                 };
@@ -114,7 +110,7 @@ impl InferType for Let {
     fn infer_type(&self, env: &mut TypeEnv, non_generic: &HashSet<Id>) -> Result<Id> {
         let Let { typ, value, .. } = self;
         if let Some(type_expr) = typ {
-            env.alloc.from_sexp(type_expr)
+            env.new_type(type_expr)
         } else {
             let infer_ty = value.infer_type(env, non_generic)?;
             Ok(infer_ty)
@@ -354,16 +350,11 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
 
 /// returns an instance of t
 fn prune(alloc: &mut TypeAlloc, t: Id) -> Id {
-    // log::debug!("prune #{} {:?}", t, alloc.get(t).unwrap());
     match alloc.get(t) {
         Ok(Type::Variable {
             instance: Some(instance_id),
             ..
-        }) => {
-            let ty = alloc.get_mut(t).unwrap();
-            ty.set_instance(instance_id);
-            instance_id
-        }
+        }) => instance_id,
         _ => t,
     }
 }
@@ -383,7 +374,7 @@ fn occurs_in_type(alloc: &mut TypeAlloc, v: Id, t: Id) -> bool {
         return true;
     }
     match alloc.get(prune_t).unwrap() {
-        Type::Primitive { id, .. } => occurs_in(alloc, id, &[]),
+        Type::Primitive { .. } => false,
         Type::Function { args, ret, .. } => {
             let args_ret = args
                 .iter()

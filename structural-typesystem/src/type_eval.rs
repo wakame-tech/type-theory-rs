@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     type_env::TypeEnv,
-    types::{Id, Type, GETTER_TYPE_KEYWORD, UNION_TYPE_KEYWORD},
+    types::{Id, Type, GETTER_TYPE_KEYWORD},
 };
 use anyhow::Result;
 use symbolic_expressions::Sexp;
@@ -42,39 +42,29 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
 }
 
 pub fn type_eval(env: &mut TypeEnv, id: Id) -> Result<Id> {
-    // type variables are identified by id, not by their display name
-    if let Type::Variable { instance: None, .. } = env.alloc.get(id)? {
-        return Ok(id);
-    }
-    let t = env.type_name(id)?;
-    match t {
-        Sexp::List(list) if list[0].is_string() && list[0].string()? == GETTER_TYPE_KEYWORD => {
-            let (record, key) = (env.new_type(&list[1])?, env.new_type(&list[2])?);
-            eval_type_access(env, record, key)
+    match env.alloc.get(id)? {
+        Type::Variable {
+            instance: Some(instance),
+            ..
+        } => type_eval(env, instance),
+        // flatten union type
+        Type::Union { types, .. } => {
+            let mut flat = BTreeSet::new();
+            for t in types {
+                let t = type_eval(env, t)?;
+                match env.alloc.get(t)? {
+                    Type::Union { types, .. } => flat.extend(types),
+                    _ => {
+                        flat.insert(t);
+                    }
+                }
+            }
+            env.new_union(flat)
         }
-        Sexp::List(list) if list[0].is_string() && list[0].string()? == UNION_TYPE_KEYWORD => {
-            // flatten union type
-            let mut types = list[1..]
-                .iter()
-                .map(|t| {
-                    let id = env.get(t)?;
-                    let t = type_eval(env, id)?;
-                    let inner = if let Type::Union { types, .. } = env.alloc.get(t)? {
-                        types
-                    } else {
-                        BTreeSet::from_iter(vec![t])
-                    };
-                    Ok(inner)
-                })
-                .collect::<Result<BTreeSet<_>>>()?
-                .into_iter()
-                .flatten()
-                .map(|t| env.type_name(t))
-                .collect::<Result<Vec<_>>>()?;
-            types.insert(0, Sexp::String(UNION_TYPE_KEYWORD.to_string()));
-            env.new_type(&Sexp::List(types))
+        Type::Container { id: con, elements } if matches!(env.alloc.get(con)?, Type::Primitive { name, .. } if name == GETTER_TYPE_KEYWORD) => {
+            eval_type_access(env, elements[0], elements[1])
         }
-        t => env.new_type(&t),
+        _ => Ok(id),
     }
 }
 

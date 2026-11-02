@@ -29,15 +29,11 @@ impl TypeCheck for Value {
             Value::List(elems) => {
                 let vec_ty = env.new_type_str("vec")?;
                 // element type is the join of all element types
-                let mut elem_ty = None;
-                for elem in elems {
-                    let ty = elem.type_check(env)?;
-                    elem_ty = Some(match elem_ty {
-                        Some(acc) => env.join(acc, ty)?,
-                        None => ty,
-                    });
-                }
-                let elem_ty = match elem_ty {
+                let elem_tys = elems
+                    .iter()
+                    .map(|elem| elem.type_check(env))
+                    .collect::<Result<Vec<_>>>()?;
+                let elem_ty = match env.join_all(elem_tys)? {
                     Some(ty) => ty,
                     None => env.new_type_str("a")?,
                 };
@@ -140,7 +136,7 @@ impl TypeCheck for TypeDef {
 impl TypeCheck for Case {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
         let bool_ty = env.new_type_str("bool")?;
-        let mut ret_ty = None;
+        let mut body_tys = vec![];
         for (pattern, body) in self.branches.iter() {
             let pattern_ty = pattern.type_check(env)?;
             if !env.is_subtype(pattern_ty, bool_ty)? {
@@ -150,14 +146,11 @@ impl TypeCheck for Case {
                     env.type_name(pattern_ty)?
                 ));
             }
-            // result type is the join of all branch types
-            let body_ty = body.type_check(env)?;
-            ret_ty = Some(match ret_ty {
-                Some(acc) => env.join(acc, body_ty)?,
-                None => body_ty,
-            });
+            body_tys.push(body.type_check(env)?);
         }
-        ret_ty.ok_or_else(|| anyhow::anyhow!("case must have at least one branch"))
+        // result type is the join of all branch types
+        env.join_all(body_tys)?
+            .ok_or_else(|| anyhow::anyhow!("case must have at least one branch"))
     }
 }
 

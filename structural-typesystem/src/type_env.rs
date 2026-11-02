@@ -21,14 +21,6 @@ pub struct TypeEnv {
     id_map: HashMap<String, Id>,
 }
 
-pub fn arrow(args: Vec<TypeExpr>, ret: TypeExpr) -> TypeExpr {
-    Sexp::List(vec![
-        Sexp::List(args),
-        Sexp::String(FN_TYPE_KEYWORD.to_string()),
-        ret,
-    ])
-}
-
 pub fn record(fields: BTreeMap<String, TypeExpr>) -> TypeExpr {
     Sexp::List(
         vec![Sexp::String(RECORD_TYPE_KEYWORD.to_string())]
@@ -82,12 +74,29 @@ impl TypeEnv {
             .ok_or(anyhow::anyhow!("{} not found", type_expr))
     }
 
-    pub fn get_by_id(&self, id: &Id) -> Result<String> {
-        self.id_map
+    pub fn get_str(&self, ty: &str) -> Result<Id> {
+        self.get(&parse_str(ty)?)
+    }
+
+    /// union of `types`. a single type is returned as-is
+    pub fn new_union(&mut self, types: BTreeSet<Id>) -> Result<Id> {
+        if types.len() == 1 {
+            return Ok(*types.first().unwrap());
+        }
+        if types
             .iter()
-            .find(|(_, v)| **v == *id)
-            .map(|(k, _)| k.clone())
-            .ok_or(anyhow::anyhow!("{} not found", id))
+            .any(|t| self.alloc.is_generic(*t).unwrap_or(true))
+        {
+            // type variables cannot round-trip through their names
+            let id = self.alloc.issue_id();
+            self.alloc.insert(Type::Union { id, types });
+            return Ok(id);
+        }
+        let types = types
+            .iter()
+            .map(|t| self.type_name(*t))
+            .collect::<Result<Vec<_>>>()?;
+        self.new_type(&container(UNION_TYPE_KEYWORD.to_string(), types))
     }
 
     pub fn type_name(&self, id: Id) -> Result<Sexp> {
@@ -103,37 +112,23 @@ impl TypeEnv {
             return Ok(*id);
         }
 
-        match ty {
+        let id = match ty {
             Sexp::String(v) if v.len() == 1 && v.chars().next().unwrap().is_alphabetic() => {
-                let id = self.alloc.issue_id();
-                self.alloc.insert(Type::variable(id, None));
-                self.register_type_id(ty, id);
-                log::debug!("new_type variable: {} #{}", ty, id);
-                Ok(id)
+                self.insert(|id| Type::variable(id, None))
             }
-            Sexp::String(s) => {
-                let id = self.alloc.issue_id();
-                self.alloc.insert(Type::primitive(id, s));
-                self.register_type_id(ty, id);
-                Ok(id)
-            }
+            Sexp::String(s) => self.insert(|id| Type::primitive(id, s)),
             Sexp::List(list)
                 if list.len() == 3
                     && list[1].is_string()
                     && list[1].string()? == FN_TYPE_KEYWORD =>
             {
-                anyhow::ensure!(list.len() == 3, "invalid function type {:?}", list);
                 let args = list[0]
                     .list()?
                     .iter()
                     .map(|s| self.new_type(s))
                     .collect::<Result<Vec<_>>>()?;
                 let ret = self.new_type(&list[2])?;
-                let id = self.alloc.issue_id();
-                log::debug!("new_type function: {} #{}", ty, id);
-                self.alloc.insert(Type::function(id, args, ret));
-                self.register_type_id(ty, id);
-                Ok(id)
+                self.insert(|id| Type::function(id, args, ret))
             }
             Sexp::List(list) if list[0].string()? == RECORD_TYPE_KEYWORD => {
                 let fields = list[1..]
@@ -142,46 +137,31 @@ impl TypeEnv {
                         let l = s.list()?;
                         let k = &l[0].string()?;
                         anyhow::ensure!(l[1].string()? == ":", "missing colon {:?}", l);
-                        let v = &l[2];
-                        let id = self.new_type(v)?;
+                        let id = self.new_type(&l[2])?;
                         Ok((k.to_string(), id))
                     })
                     .collect::<Result<BTreeMap<_, _>>>()?;
-                let id = self.alloc.issue_id();
-                self.alloc.insert(Type::record(id, fields));
-                self.register_type_id(ty, id);
-                Ok(id)
+                self.insert(|id| Type::record(id, fields))
             }
-            Sexp::List(list) if list[0].string()? == LIST_TYPE_KEYWORD => {
+            // (vec a), ([] a b)
+            Sexp::List(list)
+                if list[0].string()? == LIST_TYPE_KEYWORD
+                    || (list.len() == 3 && list[0].string()? == GETTER_TYPE_KEYWORD) =>
+            {
+                let con = self.new_type(&list[0])?;
                 let elements = list[1..]
                     .iter()
                     .map(|s| self.new_type(s))
                     .collect::<Result<Vec<_>>>()?;
-                let con = self.new_type(&list[0])?;
-                let id = self.alloc.issue_id();
-                self.alloc.insert(Type::container(con, elements));
-                self.register_type_id(ty, id);
-                Ok(id)
-            }
-            // ([] a b)
-            Sexp::List(list) if list[0].string()? == GETTER_TYPE_KEYWORD => {
-                let con = self.new_type(&list[0])?;
-                let a = self.new_type(&list[1])?;
-                let b = self.new_type(&list[2])?;
-                let id = self.alloc.issue_id();
-                self.alloc.insert(Type::container(con, vec![a, b]));
-                self.register_type_id(ty, id);
-                Ok(id)
+                // the id field of a container points to its constructor
+                self.insert(|_| Type::container(con, elements))
             }
             Sexp::List(list) if list[0].string()? == UNION_TYPE_KEYWORD => {
                 let types = list[1..]
                     .iter()
                     .map(|s| self.new_type(s))
                     .collect::<Result<BTreeSet<_>>>()?;
-                let id = self.alloc.issue_id();
-                self.alloc.insert(Type::Union { id, types });
-                self.register_type_id(ty, id);
-                Ok(id)
+                self.insert(|id| Type::Union { id, types })
             }
             Sexp::List(list)
                 if list.len() == 3
@@ -193,18 +173,26 @@ impl TypeEnv {
                 if !is_type_var {
                     return Err(anyhow::anyhow!("must be type variable: {:?}", list[0]));
                 }
-                let id = self.alloc.issue_id();
-                self.register_type_id(ty, id);
                 let upper_bound = self.new_type(&list[2])?;
-                log::debug!("new_type variable: {} <: {} #{}", ty, &list[2], id);
-                self.alloc.insert(Type::variable(id, Some(upper_bound)));
-                Ok(id)
+                self.insert(|id| Type::variable(id, Some(upper_bound)))
             }
-            _ => Err(anyhow::anyhow!(
-                "TypeEnv::new_type() unsupported type: {}",
-                ty
-            )),
-        }
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "TypeEnv::new_type() unsupported type: {}",
+                    ty
+                ))
+            }
+        };
+        log::debug!("new_type: {} #{}", ty, id);
+        self.register_type_id(ty, id);
+        Ok(id)
+    }
+
+    /// allocates a new type built from its id
+    fn insert(&mut self, f: impl FnOnce(Id) -> Type) -> Id {
+        let id = self.alloc.issue_id();
+        self.alloc.insert(f(id));
+        id
     }
 
     pub fn new_type_str(&mut self, ty: &str) -> Result<Id> {
