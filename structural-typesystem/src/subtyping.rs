@@ -1,11 +1,11 @@
 use crate::{
     type_env::TypeEnv,
     type_eval::type_eval,
-    types::{Id, Type},
+    types::{Id, Type, UNION_TYPE_KEYWORD},
 };
 use anyhow::Result;
-use std::collections::{BTreeMap, HashSet};
-use symbolic_expressions::parser::parse_str;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use symbolic_expressions::{parser::parse_str, Sexp};
 
 impl TypeEnv {
     fn is_subtype_vec(&mut self, a: Vec<Id>, b: Vec<Id>) -> Result<bool> {
@@ -26,6 +26,64 @@ impl TypeEnv {
                 self.is_subtype(*a.get(k).unwrap(), *b.get(k).unwrap())
                     .unwrap_or(false)
             }))
+    }
+
+    /// least upper bound of `a` and `b`: the larger one if comparable, otherwise their union
+    pub fn join(&mut self, a: Id, b: Id) -> Result<Id> {
+        if self.is_subtype(a, b)? {
+            return Ok(b);
+        }
+        if self.is_subtype(b, a)? {
+            return Ok(a);
+        }
+        let mut members = vec![];
+        for t in [a, b] {
+            let t = type_eval(self, t)?;
+            match self.alloc.get(t)? {
+                Type::Union { types, .. } => members.extend(types),
+                _ => members.push(t),
+            }
+        }
+        // drop members subsumed by another member
+        let mut types = BTreeSet::new();
+        for &m in members.iter() {
+            let mut subsumed = false;
+            for &o in members.iter().chain(types.clone().iter()) {
+                if o != m && self.is_subtype(m, o)? && !self.is_subtype(o, m)? {
+                    subsumed = true;
+                    break;
+                }
+            }
+            for &k in types.clone().iter() {
+                if self.is_subtype(m, k)? && self.is_subtype(k, m)? {
+                    subsumed = true;
+                }
+            }
+            if !subsumed {
+                types.insert(m);
+            }
+        }
+        if types.len() == 1 {
+            return Ok(*types.first().unwrap());
+        }
+        if types
+            .iter()
+            .any(|t| self.alloc.is_generic(*t).unwrap_or(true))
+        {
+            // type variables cannot round-trip through their names
+            let id = self.alloc.issue_id();
+            self.alloc.insert(Type::Union { id, types });
+            return Ok(id);
+        }
+        let union = types
+            .iter()
+            .map(|t| self.type_name(*t))
+            .collect::<Result<Vec<_>>>()?;
+        let union = [Sexp::String(UNION_TYPE_KEYWORD.to_string())]
+            .into_iter()
+            .chain(union)
+            .collect::<Vec<_>>();
+        self.new_type(&Sexp::List(union))
     }
 
     /// subtyping order for [TypeExpr]
@@ -136,6 +194,25 @@ mod test {
         log::debug!("{}", env.type_name(a)?);
         log::debug!("{}", env.type_name(b)?);
         env.is_subtype(a, b)
+    }
+
+    fn join(a: &str, b: &str) -> Result<String> {
+        let mut env = TypeEnv::default();
+        let a = env.new_type(&parse_str(a)?)?;
+        let b = env.new_type(&parse_str(b)?)?;
+        let j = env.join(a, b)?;
+        Ok(env.type_name(j)?.to_string())
+    }
+
+    #[test]
+    fn test_join() -> Result<()> {
+        assert_eq!(join("1", "int")?, "int");
+        assert_eq!(join("int", "1")?, "int");
+        assert_eq!(join("1", "2")?, "(| 1 2)");
+        assert_eq!(join("(| 1 :a)", "int")?, "(| int :a)");
+        assert_eq!(join("(| 1 2)", "(| 2 3)")?, "(| 1 2 3)");
+        assert_eq!(join("int", "any")?, "any");
+        Ok(())
     }
 
     #[test]

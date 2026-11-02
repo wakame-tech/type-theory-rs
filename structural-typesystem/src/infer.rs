@@ -31,12 +31,19 @@ impl InferType for Value {
                 env.new_type(&record_type)
             }
             Value::List(elems) => {
-                // each elements infers type which id is different so use 1st element of type.
-                // if empty, element type infers to any.
-                let elem = if let Some(elem) = elems.first() {
-                    elem.infer_type(env, non_generic)?
-                } else {
-                    env.new_type_str("a")?
+                // element type is the join of all element types.
+                // if empty, element type infers to a fresh type variable.
+                let mut elem: Option<Id> = None;
+                for e in elems {
+                    let ty = e.infer_type(env, non_generic)?;
+                    elem = Some(match elem {
+                        Some(acc) => env.join(acc, ty)?,
+                        None => ty,
+                    });
+                }
+                let elem = match elem {
+                    Some(elem) => elem,
+                    None => env.new_type_str("a")?,
                 };
                 let elem_ty = env.alloc.as_sexp(elem)?;
                 let container_ty = container(LIST_TYPE_KEYWORD.to_string(), vec![elem_ty]);
@@ -411,6 +418,20 @@ mod test {
         should_infer(&mut env, "true", "true")?;
         should_infer(&mut env, "1", "1")?;
         should_infer(&mut env, "(record (a : 1))", "(record (a : 1))")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_vec() -> Result<()> {
+        let mut env = TypeEnv::default();
+        should_infer(&mut env, "(vec 1 1)", "(vec 1)")?;
+        should_infer(&mut env, "(vec 1 2)", "(vec (| 1 2))")?;
+        should_infer(&mut env, "(vec 1 :a 3)", "(vec (| 1 :a 3))")?;
+        should_infer(
+            &mut env,
+            "(vec (vec 1) (vec 2))",
+            "(vec (| (vec 1) (vec 2)))",
+        )?;
         Ok(())
     }
 
