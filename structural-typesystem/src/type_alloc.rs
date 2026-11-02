@@ -151,16 +151,6 @@ impl TypeAlloc {
         }
     }
 
-    /// type parser
-    pub fn from_sexp(&self, type_sexp: &TypeExpr) -> Result<Id> {
-        let typ = self
-            .alloc
-            .iter()
-            .find(|ty| self.as_sexp(ty.id()).unwrap() == *type_sexp)
-            .ok_or(anyhow!("type of \"{}\" not found", type_sexp))?;
-        Ok(typ.id())
-    }
-
     pub fn is_generic(&self, id: Id) -> Result<bool> {
         match self.get(id)? {
             Type::Function { args, ret, .. } => Ok(args

@@ -4,7 +4,6 @@ use std::collections::HashMap;
 pub struct Issuer {
     value: u8,
     set: HashMap<Id, String>,
-    pub nest: usize,
 }
 
 impl Default for Issuer {
@@ -12,7 +11,6 @@ impl Default for Issuer {
         Issuer {
             value: b'a',
             set: HashMap::new(),
-            nest: 0,
         }
     }
 }

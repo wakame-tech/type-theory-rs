@@ -1,21 +1,37 @@
 use crate::{
     type_env::TypeEnv,
     type_eval::type_eval,
-    types::{Id, Type, UNION_TYPE_KEYWORD},
+    types::{Id, Type},
 };
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
-use symbolic_expressions::{parser::parse_str, Sexp};
+
+/// base type of a literal type: `1` -> int, `:a` -> atom, `'a'` -> str, `true` -> bool
+fn literal_base(name: &str) -> Option<&'static str> {
+    if name.starts_with(':') {
+        Some("atom")
+    } else if name.parse::<i32>().is_ok() {
+        Some("int")
+    } else if name.len() >= 2 && name.starts_with('\'') && name.ends_with('\'') {
+        Some("str")
+    } else if name == "true" || name == "false" {
+        Some("bool")
+    } else {
+        None
+    }
+}
 
 impl TypeEnv {
     fn is_subtype_vec(&mut self, a: Vec<Id>, b: Vec<Id>) -> Result<bool> {
-        Ok(a.len() == b.len()
-            && a.iter()
-                .zip(b.iter())
-                .map(|(ae, be)| self.is_subtype(*ae, *be))
-                .collect::<Result<Vec<_>>>()?
-                .iter()
-                .all(|e| *e))
+        if a.len() != b.len() {
+            return Ok(false);
+        }
+        for (a, b) in a.into_iter().zip(b) {
+            if !self.is_subtype(a, b)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// width and depth subtyping: `a` has every label of `b` with a subtype field
@@ -39,54 +55,43 @@ impl TypeEnv {
         if self.is_subtype(b, a)? {
             return Ok(a);
         }
-        let mut members = vec![];
+        let mut members = BTreeSet::new();
         for t in [a, b] {
             let t = type_eval(self, t)?;
             match self.alloc.get(t)? {
                 Type::Union { types, .. } => members.extend(types),
-                _ => members.push(t),
+                _ => {
+                    members.insert(t);
+                }
             }
         }
-        // drop members subsumed by another member
+        // drop members subsumed by another member (keeping the smallest id among equivalents)
         let mut types = BTreeSet::new();
         for &m in members.iter() {
             let mut subsumed = false;
-            for &o in members.iter().chain(types.clone().iter()) {
-                if o != m && self.is_subtype(m, o)? && !self.is_subtype(o, m)? {
+            for &o in members.iter() {
+                if o != m && self.is_subtype(m, o)? && (o < m || !self.is_subtype(o, m)?) {
                     subsumed = true;
                     break;
-                }
-            }
-            for &k in types.clone().iter() {
-                if self.is_subtype(m, k)? && self.is_subtype(k, m)? {
-                    subsumed = true;
                 }
             }
             if !subsumed {
                 types.insert(m);
             }
         }
-        if types.len() == 1 {
-            return Ok(*types.first().unwrap());
+        self.new_union(types)
+    }
+
+    /// join of all `types`, or `None` if empty
+    pub fn join_all(&mut self, types: impl IntoIterator<Item = Id>) -> Result<Option<Id>> {
+        let mut acc = None;
+        for t in types {
+            acc = Some(match acc {
+                Some(acc) => self.join(acc, t)?,
+                None => t,
+            });
         }
-        if types
-            .iter()
-            .any(|t| self.alloc.is_generic(*t).unwrap_or(true))
-        {
-            // type variables cannot round-trip through their names
-            let id = self.alloc.issue_id();
-            self.alloc.insert(Type::Union { id, types });
-            return Ok(id);
-        }
-        let union = types
-            .iter()
-            .map(|t| self.type_name(*t))
-            .collect::<Result<Vec<_>>>()?;
-        let union = [Sexp::String(UNION_TYPE_KEYWORD.to_string())]
-            .into_iter()
-            .chain(union)
-            .collect::<Vec<_>>();
-        self.new_type(&Sexp::List(union))
+        Ok(acc)
     }
 
     /// subtyping order for [TypeExpr]
@@ -95,7 +100,7 @@ impl TypeEnv {
             return Ok(true);
         }
 
-        let any = self.get(&parse_str("any")?)?;
+        let any = self.get_str("any")?;
         let (a, b) = (type_eval(self, a)?, type_eval(self, b)?);
         if a == b {
             return Ok(true);
@@ -153,25 +158,10 @@ impl TypeEnv {
             (Type::Variable { id: a_id, .. }, Type::Variable { id: b_id, .. }) => Ok(a_id == b_id),
             // ? vs any
             (_, Type::Primitive { id, .. }) if id == any => Ok(true),
-            // atom literal types
-            (Type::Primitive { name, .. }, _) if name.starts_with(':') => {
-                let atom = self.get(&parse_str("atom")?)?;
-                self.is_subtype(atom, b)
-            }
-            // int literal types
-            (Type::Primitive { name, .. }, _) if name.parse::<i32>().is_ok() => {
-                let int = self.get(&parse_str("int")?)?;
-                self.is_subtype(int, b)
-            }
-            // str literal types
-            (Type::Primitive { name, .. }, _) if name.starts_with('\'') && name.ends_with('\'') => {
-                let str = self.get(&parse_str("str")?)?;
-                self.is_subtype(str, b)
-            }
-            // bool literal types
-            (Type::Primitive { name, .. }, _) if name == "true" || name == "false" => {
-                let bool = self.get(&parse_str("bool")?)?;
-                self.is_subtype(bool, b)
+            // literal types are subtypes of their base types
+            (Type::Primitive { name, .. }, _) if literal_base(&name).is_some() => {
+                let base = self.get_str(literal_base(&name).unwrap())?;
+                self.is_subtype(base, b)
             }
             _ => Ok(false),
         };
