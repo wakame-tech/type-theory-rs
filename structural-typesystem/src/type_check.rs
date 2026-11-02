@@ -257,6 +257,16 @@ mod tests {
     }
 
     #[test]
+    fn record_width() -> Result<()> {
+        assert_eq!(
+            type_of("(let x : (record (a : int)) (record (a : 1) (b : 2)))")?,
+            "(record (a : int))"
+        );
+        assert!(type_of("(let x : (record (a : int) (b : int)) (record (a : 1)))").is_err());
+        Ok(())
+    }
+
+    #[test]
     fn vec_join() -> Result<()> {
         assert_eq!(type_of("(vec 1 1)")?, "(vec 1)");
         assert_eq!(type_of("(vec true false)")?, "(vec (| true false))");
