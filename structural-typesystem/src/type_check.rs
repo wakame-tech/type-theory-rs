@@ -104,9 +104,10 @@ impl TypeCheck for FnApp {
     /// f :: a -> b
     /// v :: a
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        self.infer_type(env, &HashSet::new())?;
+        // the inferred type is the return type instantiated for these arguments
+        let ret = self.infer_type(env, &HashSet::new())?;
         let f_ty = self.0.type_check(env)?;
-        let Type::Function { args, ret, .. } = env.alloc.get(f_ty)? else {
+        let Type::Function { args, .. } = env.alloc.get(f_ty)? else {
             return Err(anyhow::anyhow!("{} is not appliable type", self.0));
         };
         for (value, arg) in self.1.iter().zip(args.iter()) {
@@ -263,6 +264,26 @@ mod tests {
             "(record (a : int))"
         );
         assert!(type_of("(let x : (record (a : int) (b : int)) (record (a : 1)))").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn generic_app_return_type() -> Result<()> {
+        setup();
+        let mut env = TypeEnv::default();
+        let id = env.new_type_str("((a) -> a)")?;
+        env.set_variable("id", id);
+        let plus = env.new_type_str("((int int) -> int)")?;
+        env.set_variable("+", plus);
+        for (expr, expected) in [
+            ("(id 1)", "1"),
+            ("(+ (id 1) 2)", "int"),
+            ("(id true)", "true"),
+        ] {
+            let ast = into_ast(&parse_str(expr)?)?;
+            let ty = ast.type_check(&mut env)?;
+            assert_eq!(env.type_name(ty)?.to_string(), expected);
+        }
         Ok(())
     }
 
