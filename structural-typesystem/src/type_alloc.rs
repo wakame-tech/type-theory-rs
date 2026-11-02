@@ -127,7 +127,7 @@ impl TypeAlloc {
                 let container = self.as_sexp(id)?;
                 let elements = elements
                     .iter()
-                    .map(|id| self.as_sexp(*id))
+                    .map(|id| self.as_sexp_rec(*id, issuer, nest + 1))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Sexp::List(
                     vec![container]
@@ -139,7 +139,7 @@ impl TypeAlloc {
             Type::Union { types, .. } => {
                 let types = types
                     .iter()
-                    .map(|id| self.as_sexp(*id))
+                    .map(|id| self.as_sexp_rec(*id, issuer, nest + 1))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(Sexp::List(
                     vec![Sexp::String("|".to_string())]
@@ -213,6 +213,22 @@ mod tests {
         let mut type_env = TypeEnv::default();
         let union = type_env.new_type(&parse_str("(| int atom)")?)?;
         assert_eq!(type_env.alloc.as_sexp(union)?, parse_str("(| int atom)")?);
+        Ok(())
+    }
+
+    #[test]
+    fn type_variable_names_in_containers() -> Result<()> {
+        setup();
+        let mut type_env = TypeEnv::default();
+        for ty in [
+            "((a b) -> ([] a b))",
+            "((a b) -> (vec b))",
+            "((a b) -> (| a b))",
+            "((((a) -> b) (vec a)) -> (vec b))",
+        ] {
+            let id = type_env.new_type(&parse_str(ty)?)?;
+            assert_eq!(type_env.type_name(id)?, parse_str(ty)?);
+        }
         Ok(())
     }
 }
