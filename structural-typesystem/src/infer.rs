@@ -306,7 +306,7 @@ fn unify(env: &mut TypeEnv, t: Id, s: Id) -> Result<usize> {
             Type::Record {
                 fields: b_types, ..
             },
-        ) => {
+        ) if a_types.keys().eq(b_types.keys()) => {
             let fields = a_types
                 .iter()
                 .zip(b_types.iter())
@@ -482,6 +482,18 @@ mod test {
         let ty = env.new_type_str("((a a) -> a)")?;
         env.set_variable("f", ty);
         should_infer(&mut env, "(f 1 1)", "1")
+    }
+
+    #[test]
+    fn test_unify_record_labels() -> Result<()> {
+        let mut env = TypeEnv::default();
+        let ty = env.new_type_str("(((record (a : int))) -> int)")?;
+        env.set_variable("f", ty);
+        should_infer(&mut env, "(f (record (a : 1) (b : true)))", "int")?;
+        let ty = env.new_type_str("(((record (b : bool))) -> int)")?;
+        env.set_variable("g", ty);
+        assert!(should_infer(&mut env, "(g (record (a : true) (b : 1)))", "int").is_err());
+        Ok(())
     }
 
     #[test]

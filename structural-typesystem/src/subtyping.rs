@@ -4,7 +4,7 @@ use crate::{
     types::{Id, Type, UNION_TYPE_KEYWORD},
 };
 use anyhow::Result;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use symbolic_expressions::{parser::parse_str, Sexp};
 
 impl TypeEnv {
@@ -18,14 +18,17 @@ impl TypeEnv {
                 .all(|e| *e))
     }
 
+    /// width and depth subtyping: `a` has every label of `b` with a subtype field
     fn is_subtype_map(&mut self, a: BTreeMap<String, Id>, b: BTreeMap<String, Id>) -> Result<bool> {
-        let a_keys = a.keys().collect::<HashSet<_>>();
-        let b_keys = b.keys().collect::<HashSet<_>>();
-        Ok(a_keys == b_keys
-            && a_keys.into_iter().all(|k| {
-                self.is_subtype(*a.get(k).unwrap(), *b.get(k).unwrap())
-                    .unwrap_or(false)
-            }))
+        for (label, b_field) in b.iter() {
+            let Some(a_field) = a.get(label) else {
+                return Ok(false);
+            };
+            if !self.is_subtype(*a_field, *b_field)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// least upper bound of `a` and `b`: the larger one if comparable, otherwise their union
@@ -244,6 +247,29 @@ mod test {
         assert!(is_subtype(
             "(record (a : int) (b : int))",
             "(record (a : any) (b : int))",
+        )?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_subtype_record_width() -> Result<()> {
+        assert!(is_subtype(
+            "(record (a : int) (b : int))",
+            "(record (a : int))"
+        )?);
+        assert!(is_subtype(
+            "(record (a : 1) (b : true))",
+            "(record (a : int))"
+        )?);
+        assert!(is_subtype("(record (a : int))", "(record)")?);
+        assert!(!is_subtype(
+            "(record (a : int))",
+            "(record (a : int) (b : int))"
+        )?);
+        assert!(!is_subtype("(record (a : int))", "(record (b : int))")?);
+        assert!(!is_subtype(
+            "(record (a : bool) (b : int))",
+            "(record (a : int))"
         )?);
         Ok(())
     }
