@@ -236,4 +236,26 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn bounded_type_variable() -> Result<()> {
+        setup();
+        for (expr, error) in [
+            ("((fn (x : (a <: atom)) x) :a)", None),
+            ("((fn (x : (a <: (| :ok :err))) x) :ok)", None),
+            (
+                "((fn (x : (a <: atom)) x) 1)",
+                Some("1 is not subtype of atom".to_string()),
+            ),
+        ] {
+            let ast = into_ast(&parse_str(expr)?)?;
+            assert_eq!(
+                ast.type_check(&mut Default::default())
+                    .err()
+                    .map(|e| e.to_string()),
+                error
+            );
+        }
+        Ok(())
+    }
 }

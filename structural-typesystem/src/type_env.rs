@@ -195,7 +195,7 @@ impl TypeEnv {
                 }
                 let id = self.alloc.issue_id();
                 self.register_type_id(ty, id);
-                let upper_bound = self.get(&list[2])?;
+                let upper_bound = self.new_type(&list[2])?;
                 log::debug!("new_type variable: {} <: {} #{}", ty, &list[2], id);
                 self.alloc.insert(Type::variable(id, Some(upper_bound)));
                 Ok(id)

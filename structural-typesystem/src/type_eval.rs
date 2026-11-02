@@ -42,6 +42,10 @@ fn eval_type_access(env: &mut TypeEnv, record: Id, key: Id) -> Result<Id> {
 }
 
 pub fn type_eval(env: &mut TypeEnv, id: Id) -> Result<Id> {
+    // type variables are identified by id, not by their display name
+    if let Type::Variable { instance: None, .. } = env.alloc.get(id)? {
+        return Ok(id);
+    }
     let t = env.type_name(id)?;
     match t {
         Sexp::List(list) if list[0].is_string() && list[0].string()? == GETTER_TYPE_KEYWORD => {

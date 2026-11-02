@@ -42,6 +42,14 @@ impl TypeEnv {
             (Type::Union { types, .. }, _) => Ok(types
                 .iter()
                 .all(|t| self.is_subtype(*t, b).unwrap_or(false))),
+            // bounded type variables: the upper bound must be a subtype
+            (
+                Type::Variable {
+                    upper_bound: Some(bound),
+                    ..
+                },
+                _,
+            ) => self.is_subtype(bound, b),
             // right union types: some member must be a supertype
             (_, Type::Union { types, .. }) => Ok(types
                 .iter()
@@ -176,6 +184,26 @@ mod test {
         assert!(is_subtype("(| 1 2 3)", "(| (| 1 2) (| 3))")?);
         assert!(is_subtype("(| int bool)", "(| int bool any)")?);
         assert!(is_subtype("(| str)", "(| int bool any)")?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_subtype_bounded_variable() -> Result<()> {
+        assert!(is_subtype("(a <: atom)", "atom")?);
+        assert!(is_subtype("(a <: atom)", "any")?);
+        assert!(is_subtype("(a <: :ok)", "(| :ok :err)")?);
+        assert!(is_subtype("(a <: (| 1 2))", "int")?);
+        assert!(is_subtype("(a <: (| 1 2))", "(| 1 2 3)")?);
+        assert!(!is_subtype("(a <: atom)", "int")?);
+        assert!(!is_subtype("a", "atom")?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_subtype_variable() -> Result<()> {
+        assert!(is_subtype("a", "a")?);
+        assert!(!is_subtype("a", "b")?);
+        assert!(is_subtype("a", "any")?);
         Ok(())
     }
 
