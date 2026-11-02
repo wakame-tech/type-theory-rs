@@ -28,21 +28,19 @@ impl TypeCheck for Value {
             }
             Value::List(elems) => {
                 let vec_ty = env.new_type_str("vec")?;
-                let elem_tys = elems
-                    .iter()
-                    .map(|elem| elem.type_check(env))
-                    .collect::<Result<Vec<_>>>()?;
-                if elem_tys.iter().collect::<HashSet<_>>().len() != 1 {
-                    return Err(anyhow::anyhow!(
-                        "list elements must have same type: [{}]",
-                        elem_tys
-                            .iter()
-                            .map(|id| env.type_name(*id).map(|t| t.to_string()))
-                            .collect::<Result<Vec<_>>>()?
-                            .join(", ")
-                    ));
+                // element type is the join of all element types
+                let mut elem_ty = None;
+                for elem in elems {
+                    let ty = elem.type_check(env)?;
+                    elem_ty = Some(match elem_ty {
+                        Some(acc) => env.join(acc, ty)?,
+                        None => ty,
+                    });
                 }
-                let elem_ty = elem_tys[0];
+                let elem_ty = match elem_ty {
+                    Some(ty) => ty,
+                    None => env.new_type_str("a")?,
+                };
                 let container_ty = Type::container(vec_ty, vec![elem_ty]);
                 let id = env.alloc.issue_id();
                 env.alloc.insert(container_ty);
@@ -140,34 +138,25 @@ impl TypeCheck for TypeDef {
 
 impl TypeCheck for Case {
     fn type_check(&self, env: &mut TypeEnv) -> Result<Id> {
-        let body_tys = self
-            .branches
-            .iter()
-            .map(|(pattern, body)| {
-                let pattern_ty = pattern.type_check(env)?;
-                if pattern_ty != env.new_type_str("bool")? {
-                    return Err(anyhow::anyhow!(
-                        "pattern {} must be bool but {}",
-                        pattern,
-                        env.type_name(pattern_ty)?
-                    ));
-                }
-                let body_ty = body.type_check(env)?;
-                Ok(body_ty)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        if body_tys.iter().collect::<HashSet<_>>().len() != 1 {
-            return Err(anyhow::anyhow!(
-                "case branches must have same type: [{}]",
-                body_tys
-                    .iter()
-                    .map(|id| env.type_name(*id).map(|t| t.to_string()))
-                    .collect::<Result<Vec<_>>>()?
-                    .join(", ")
-            ));
+        let bool_ty = env.new_type_str("bool")?;
+        let mut ret_ty = None;
+        for (pattern, body) in self.branches.iter() {
+            let pattern_ty = pattern.type_check(env)?;
+            if !env.is_subtype(pattern_ty, bool_ty)? {
+                return Err(anyhow::anyhow!(
+                    "pattern {} must be bool but {}",
+                    pattern,
+                    env.type_name(pattern_ty)?
+                ));
+            }
+            // result type is the join of all branch types
+            let body_ty = body.type_check(env)?;
+            ret_ty = Some(match ret_ty {
+                Some(acc) => env.join(acc, body_ty)?,
+                None => body_ty,
+            });
         }
-        let ret_ty = body_tys[0];
-        Ok(ret_ty)
+        ret_ty.ok_or_else(|| anyhow::anyhow!("case must have at least one branch"))
     }
 }
 
@@ -204,7 +193,7 @@ impl TypeCheck for Program {
 
 #[cfg(test)]
 mod tests {
-    use crate::{tests::setup, type_check::TypeCheck};
+    use crate::{tests::setup, type_check::TypeCheck, type_env::TypeEnv};
     use anyhow::Result;
     use ast::into_ast::into_ast;
     use symbolic_expressions::parser::parse_str;
@@ -256,6 +245,37 @@ mod tests {
                 error
             );
         }
+        Ok(())
+    }
+
+    fn type_of(expr: &str) -> Result<String> {
+        setup();
+        let ast = into_ast(&parse_str(expr)?)?;
+        let mut env = TypeEnv::default();
+        let id = ast.type_check(&mut env)?;
+        Ok(env.type_name(id)?.to_string())
+    }
+
+    #[test]
+    fn vec_join() -> Result<()> {
+        assert_eq!(type_of("(vec 1 1)")?, "(vec 1)");
+        assert_eq!(type_of("(vec true false)")?, "(vec (| true false))");
+        assert_eq!(
+            type_of("(let a : (vec bool) (vec true false))")?,
+            "(vec bool)"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn case_join() -> Result<()> {
+        assert_eq!(type_of("(case (true => 1) (false => 2))")?, "(| 1 2)");
+        assert_eq!(type_of("(case (true => 1) (false => 1))")?, "1");
+        assert_eq!(
+            type_of("(let x : int (case (true => 1) (false => 2)))")?,
+            "int"
+        );
+        assert!(type_of("(case (1 => 1))").is_err());
         Ok(())
     }
 }

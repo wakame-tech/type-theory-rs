@@ -128,13 +128,22 @@ impl InferType for Case {
         let mut ret_ty = None;
         for (_, body) in branches {
             let body_ty = body.infer_type(env, non_generic)?;
-            if let Some(ret_ty) = ret_ty {
-                unify(env, ret_ty, body_ty)?;
-            } else {
-                ret_ty = Some(body_ty);
-            }
+            ret_ty = Some(match ret_ty {
+                Some(acc) => {
+                    let (a, b) = (prune(&mut env.alloc, acc), prune(&mut env.alloc, body_ty));
+                    let is_var =
+                        |env: &TypeEnv, id| matches!(env.alloc.get(id), Ok(Type::Variable { .. }));
+                    // bind type variables, otherwise take the join of concrete types
+                    if is_var(env, a) || is_var(env, b) {
+                        unify(env, a, b)?
+                    } else {
+                        env.join(a, b)?
+                    }
+                }
+                None => body_ty,
+            });
         }
-        Ok(ret_ty.unwrap())
+        ret_ty.ok_or_else(|| anyhow::anyhow!("case must have at least one branch"))
     }
 }
 
