@@ -38,17 +38,11 @@ impl TypeEnv {
         let (a, b) = (type_eval(self, a)?, type_eval(self, b)?);
         let (a_ty, b_ty) = (self.alloc.get(a)?, self.alloc.get(b)?);
         let res = match (a_ty, b_ty) {
-            // both are union types
-            (Type::Union { types: a_types, .. }, Type::Union { types: b_types, .. }) => {
-                let is_subset = a_types.is_subset(&b_types);
-                let has_any_subtype = b_types.iter().any(|bt| {
-                    a_types
-                        .iter()
-                        .all(|at| self.is_subtype(*at, *bt).unwrap_or(false))
-                });
-                Ok(is_subset || has_any_subtype)
-            }
-            // union types
+            // left union types: every member must be a subtype
+            (Type::Union { types, .. }, _) => Ok(types
+                .iter()
+                .all(|t| self.is_subtype(*t, b).unwrap_or(false))),
+            // right union types: some member must be a supertype
             (_, Type::Union { types, .. }) => Ok(types
                 .iter()
                 .any(|t| self.is_subtype(a, *t).unwrap_or(false))),
@@ -182,6 +176,19 @@ mod test {
         assert!(is_subtype("(| 1 2 3)", "(| (| 1 2) (| 3))")?);
         assert!(is_subtype("(| int bool)", "(| int bool any)")?);
         assert!(is_subtype("(| str)", "(| int bool any)")?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_is_subtype_union_forall_exists() -> Result<()> {
+        assert!(is_subtype("(| 1 :ok)", "(| int atom)")?);
+        assert!(is_subtype("(| 1 2)", "int")?);
+        assert!(is_subtype("(| 1 :ok)", "any")?);
+        assert!(!is_subtype("(| 1 :ok)", "int")?);
+        assert!(!is_subtype("(| 1 'a')", "(| int atom)")?);
+        // transitivity: (| 1 :ok) <: (| 1 atom) <: (| int atom)
+        assert!(is_subtype("(| 1 :ok)", "(| 1 atom)")?);
+        assert!(is_subtype("(| 1 atom)", "(| int atom)")?);
         Ok(())
     }
 }
